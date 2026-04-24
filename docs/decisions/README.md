@@ -19,10 +19,11 @@ Decisões arquiteturais e de produto **com impacto em código/sistema**. Cada AD
 | 0008 | Channel Evolution Strategy | Proposed | Fase 3 — Arquitetura | @architect |
 | 0009 | AI Provider Strategy | Proposed | Fase 3 — Arquitetura (NFR custo) | @architect |
 | 0010 | Context Engineering Strategy | Proposed | Fase 3 + Fase 5 | @architect + Isabela |
+| 0011 | User Identity Model | Proposed | Fase 3 — Arquitetura (schema) | @architect |
 
 ## Categorias
 
-- **Bloqueante técnico** (impede arquitetura ou Épico 0): 0001, 0002, 0008, 0009, 0010.
+- **Bloqueante técnico** (impede arquitetura ou Épico 0): 0001, 0002, 0008, 0009, 0010, 0011.
 - **Bloqueante de produto** (impede Épico 1+): 0003, 0004.
 
 ## Fora de escopo deste backlog
