@@ -7,7 +7,7 @@ Proposed
 Em produto AI-heavy como Perpétuo, **engenharia de contexto não é detalhe de implementação — é metade do produto**. Define como o modelo recebe informação a cada turno conversacional, como a "voz da Isabela" se mantém estável, como o custo por chamada é controlado e como qualidade é medida.
 
 Variáveis de contexto identificadas:
-- **Identidade**: nome da IA (ADR 0005), system prompt com voz Isabela, guardrails anti-redpill.
+- **Identidade**: nome da IA (definido fora do backlog técnico — vira variável de config), system prompt com voz Isabela, guardrails anti-redpill.
 - **Usuário**: arquétipo (ADR 0003), respostas do diagnóstico (ADR 0004), perfil declarado, dia do plano direcional 30d, histórico de uso.
 - **Conversação**: histórico recente (N turnos) + sumário comprimido de turnos antigos.
 - **Tarefa**: tipo de pedido (análise de print? perfil? coaching de mensagem? dúvida geral?).
@@ -75,6 +75,6 @@ TBD — fechar na Fase 3 (arquitetura) + Fase 5 (conteúdo).
 - Épico 1 — Diagnóstico não roda sem context builder.
 
 ## Relacionado
-- ADR 0003, 0004, 0005 (insumos de conteúdo).
+- ADR 0003, 0004 (insumos de conteúdo).
 - ADR 0009 — AI Provider Strategy.
 - `docs/context-engineering/` (a ser criado na Fase 3).
