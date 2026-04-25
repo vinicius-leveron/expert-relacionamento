@@ -9,3 +9,5 @@ export {
 } from './diagnosis.js'
 
 export { getJourneyPrompt, DAILY_CHECKIN, type JourneyDay } from './journey.js'
+
+export { IMAGE_ANALYSIS_PROMPT, IMAGE_ANALYSIS_SYSTEM_ADDITION } from './image-analysis.js'

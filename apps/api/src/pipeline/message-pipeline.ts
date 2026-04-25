@@ -3,6 +3,7 @@ import {
   ContextBuilder,
   type ConversationHistory,
   DIAGNOSIS_INTRO,
+  IMAGE_ANALYSIS_SYSTEM_ADDITION,
   ISABELA_GREETING,
   ISABELA_RETURNING,
   type RAGService,
@@ -188,7 +189,8 @@ export class MessagePipeline {
       : undefined
 
     // Seleciona prompt e monta contexto
-    const systemPrompt = this.selectSystemPrompt(userContext, history)
+    const hasImage = contentBlocks?.some((b) => b.type === 'image') ?? false
+    const systemPrompt = this.selectSystemPrompt(userContext, history, hasImage)
     const messages = this.contextBuilder.build({
       systemPrompt,
       userContext,
@@ -435,23 +437,35 @@ export class MessagePipeline {
     }
   }
 
-  private selectSystemPrompt(context: UserContext, history: ConversationHistory): string {
+  private selectSystemPrompt(
+    context: UserContext,
+    history: ConversationHistory,
+    hasImage = false,
+  ): string {
+    let basePrompt: string
+
     // Primeiro contato
     if (history.messages.length === 0) {
-      return ISABELA_GREETING
+      basePrompt = ISABELA_GREETING
     }
-
     // Ainda não fez diagnóstico - IA conduz naturalmente
-    if (!context.diagnosisCompleted) {
-      return DIAGNOSIS_INTRO
+    else if (!context.diagnosisCompleted) {
+      basePrompt = DIAGNOSIS_INTRO
     }
-
     // Tem arquétipo - usa prompt da jornada
-    if (context.archetype) {
-      return getJourneyPrompt(context.archetype as Archetype, context.currentDayInJourney)
+    else if (context.archetype) {
+      basePrompt = getJourneyPrompt(context.archetype as Archetype, context.currentDayInJourney)
+    }
+    // Fallback
+    else {
+      basePrompt = ISABELA_RETURNING
     }
 
-    // Fallback
-    return ISABELA_RETURNING
+    // Adiciona contexto de análise de imagem se necessário
+    if (hasImage) {
+      return basePrompt + IMAGE_ANALYSIS_SYSTEM_ADDITION
+    }
+
+    return basePrompt
   }
 }

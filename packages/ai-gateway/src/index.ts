@@ -52,6 +52,9 @@ export {
   getJourneyPrompt,
   DAILY_CHECKIN,
   type JourneyDay,
+  // Image Analysis
+  IMAGE_ANALYSIS_PROMPT,
+  IMAGE_ANALYSIS_SYSTEM_ADDITION,
 } from './prompts/index.js'
 
 // Diagnostic Service
