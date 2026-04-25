@@ -119,6 +119,16 @@ importers:
         specifier: ^2.0.0
         version: 2.1.9(@types/node@20.19.39)
 
+  packages/payment-gateway:
+    dependencies:
+      '@perpetuo/core':
+        specifier: workspace:*
+        version: link:../core
+    devDependencies:
+      vitest:
+        specifier: ^2.0.0
+        version: 2.1.9(@types/node@20.19.39)
+
 packages:
 
   '@anthropic-ai/sdk@0.32.1':
