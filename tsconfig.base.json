@@ -1,0 +1,36 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+    "lib": ["ES2022"],
+    "strict": true,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "forceConsistentCasingInFileNames": true,
+    "declaration": true,
+    "declarationMap": true,
+    "sourceMap": true,
+    "composite": true,
+    "incremental": true,
+    "resolveJsonModule": true,
+    "isolatedModules": true,
+    "noEmit": false,
+    "outDir": "dist",
+    "rootDir": "src",
+    "baseUrl": ".",
+    "paths": {
+      "@perpetuo/core": ["packages/core/src"],
+      "@perpetuo/core/*": ["packages/core/src/*"],
+      "@perpetuo/database": ["packages/database/src"],
+      "@perpetuo/database/*": ["packages/database/src/*"],
+      "@perpetuo/ai-gateway": ["packages/ai-gateway/src"],
+      "@perpetuo/ai-gateway/*": ["packages/ai-gateway/src/*"],
+      "@perpetuo/whatsapp-adapter": ["packages/channels/whatsapp-adapter/src"],
+      "@perpetuo/whatsapp-adapter/*": ["packages/channels/whatsapp-adapter/src/*"],
+      "@perpetuo/payment-gateway": ["packages/payment-gateway/src"],
+      "@perpetuo/payment-gateway/*": ["packages/payment-gateway/src/*"]
+    }
+  },
+  "exclude": ["node_modules", "dist"]
+}

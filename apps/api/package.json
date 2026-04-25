@@ -1,0 +1,26 @@
+{
+  "name": "@perpetuo/api",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsx watch src/index.ts",
+    "start": "node dist/index.js",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@hono/node-server": "^1.12.0",
+    "@perpetuo/core": "workspace:*",
+    "@perpetuo/database": "workspace:*",
+    "@perpetuo/whatsapp-adapter": "workspace:*",
+    "hono": "^4.5.0",
+    "pino": "^9.3.0",
+    "pino-pretty": "^11.2.0"
+  },
+  "devDependencies": {
+    "tsx": "^4.16.0",
+    "vitest": "^2.0.0"
+  }
+}

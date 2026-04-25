@@ -1,0 +1,21 @@
+{
+  "name": "@perpetuo/worker",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsx watch src/index.ts",
+    "start": "node dist/index.js",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@perpetuo/core": "workspace:*",
+    "@perpetuo/database": "workspace:*",
+    "pino": "^9.3.0",
+    "pino-pretty": "^11.2.0"
+  },
+  "devDependencies": {
+    "tsx": "^4.16.0"
+  }
+}
