@@ -18,9 +18,14 @@ import type {
   UserRepository,
 } from '@perpetuo/core'
 import { IdentityResolver } from '@perpetuo/core'
-import type { ConversationRepository, DiagnosticRepository } from '@perpetuo/database'
+import type {
+  ConversationRepository,
+  DiagnosticRepository,
+  SubscriptionRepository,
+} from '@perpetuo/database'
 import type { Logger } from 'pino'
 import { DiagnosticHandler } from './diagnostic-handler.js'
+import { SubscriptionGuard } from './subscription-guard.js'
 
 export interface PipelineContext {
   message: IncomingMessage
@@ -51,6 +56,11 @@ export interface PipelineDependencies {
   transcriber?: TranscriptionService
   conversationRepo?: ConversationRepository
   diagnosticRepo?: DiagnosticRepository
+  subscriptionRepo?: SubscriptionRepository
+  /** URL para redirecionamento de pagamento */
+  paymentUrl?: string
+  /** Se true, bloqueia usuários sem assinatura */
+  enforcePaywall?: boolean
 }
 
 /**
@@ -72,11 +82,18 @@ export class MessagePipeline {
   private readonly identityResolver: IdentityResolver
   private readonly contextBuilder: ContextBuilder
   private readonly diagnosticHandler: DiagnosticHandler | null
+  private readonly subscriptionGuard: SubscriptionGuard | null
 
   constructor(private readonly deps: PipelineDependencies) {
     this.identityResolver = new IdentityResolver(deps.userRepo)
     this.contextBuilder = new ContextBuilder({ maxHistoryMessages: 20 })
     this.diagnosticHandler = deps.diagnosticRepo ? new DiagnosticHandler(deps.diagnosticRepo) : null
+    this.subscriptionGuard = deps.subscriptionRepo
+      ? new SubscriptionGuard(deps.subscriptionRepo, {
+          enforcePaywall: deps.enforcePaywall ?? false,
+          paymentUrl: deps.paymentUrl,
+        })
+      : null
   }
 
   async process(rawPayload: unknown, signature: string): Promise<PipelineResult> {
@@ -153,6 +170,18 @@ export class MessagePipeline {
     // Busca histórico
     const history = await this.getConversationHistory(user.id, conversation?.id)
 
+    // Verifica assinatura (após diagnóstico completo)
+    if (userContext.diagnosisCompleted) {
+      const blockMessage = await this.checkSubscription(user.id)
+      if (blockMessage) {
+        await this.saveAIResponse(conversation?.id, {
+          content: blockMessage,
+          usage: { inputTokens: 0, outputTokens: 0 },
+        })
+        return blockMessage
+      }
+    }
+
     // Busca RAG (apenas se diagnóstico completo)
     const ragContext = userContext.diagnosisCompleted
       ? await this.searchRAG(messageText)
@@ -227,6 +256,21 @@ export class MessagePipeline {
   ) {
     const baseScores = { provedor: 4, aventureiro: 4, romantico: 4, racional: 4 }
     return { ...baseScores, [archetype]: 9 }
+  }
+
+  /**
+   * Verifica assinatura e retorna mensagem de bloqueio se necessário
+   */
+  private async checkSubscription(userId: string): Promise<string | null> {
+    if (!this.subscriptionGuard) return null
+
+    const blockMessage = await this.subscriptionGuard.getBlockMessage(userId)
+
+    if (blockMessage) {
+      this.deps.logger.info({ userId }, 'User blocked: no active subscription')
+    }
+
+    return blockMessage
   }
 
   private async saveUserMessage(
