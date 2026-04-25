@@ -47,11 +47,16 @@ export class ContextBuilder {
     userContext: UserContext
     history: ConversationHistory
     currentMessage: string | ContentBlock[]
+    ragContext?: string // Conhecimento relevante do RAG
   }): ChatMessage[] {
     const messages: ChatMessage[] = []
 
-    // 1. System prompt com contexto do usuário
-    const enrichedSystemPrompt = this.enrichSystemPrompt(params.systemPrompt, params.userContext)
+    // 1. System prompt com contexto do usuário e RAG
+    const enrichedSystemPrompt = this.enrichSystemPrompt(
+      params.systemPrompt,
+      params.userContext,
+      params.ragContext,
+    )
     messages.push({
       role: 'system',
       content: enrichedSystemPrompt,
@@ -92,11 +97,17 @@ export class ContextBuilder {
   }
 
   /**
-   * Enriquece system prompt com informações do usuário
+   * Enriquece system prompt com informações do usuário e RAG
    */
-  private enrichSystemPrompt(basePrompt: string, context: UserContext): string {
-    const contextLines: string[] = []
+  private enrichSystemPrompt(
+    basePrompt: string,
+    context: UserContext,
+    ragContext?: string,
+  ): string {
+    const sections: string[] = [basePrompt]
 
+    // Contexto do usuário
+    const contextLines: string[] = []
     if (context.archetype) {
       contextLines.push(`Arquétipo do usuário: ${context.archetype}`)
       contextLines.push(`Dia na jornada: ${context.currentDayInJourney}/30`)
@@ -104,16 +115,19 @@ export class ContextBuilder {
       contextLines.push('Status: Usuário ainda não completou o diagnóstico inicial')
     }
 
-    if (contextLines.length === 0) {
-      return basePrompt
-    }
-
-    return `${basePrompt}
-
----
+    if (contextLines.length > 0) {
+      sections.push(`---
 CONTEXTO DO USUÁRIO:
 ${contextLines.join('\n')}
----`
+---`)
+    }
+
+    // Conhecimento do RAG
+    if (ragContext) {
+      sections.push(ragContext)
+    }
+
+    return sections.join('\n\n')
   }
 
   /**

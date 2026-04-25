@@ -19,6 +19,15 @@ export {
   type KnowledgeChunk,
 } from './rag/index.js'
 
+// Transcription
+export {
+  type TranscriptionPort,
+  type TranscriptionResult,
+  WhisperAdapter,
+  type WhisperConfig,
+  MockTranscriptionAdapter,
+} from './transcription/index.js'
+
 // Context
 export {
   ContextBuilder,

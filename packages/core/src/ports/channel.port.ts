@@ -13,8 +13,8 @@ export interface IncomingMessage {
 
 export type MessageContent =
   | { type: 'text'; text: string }
-  | { type: 'image'; url: string; caption?: string }
-  | { type: 'audio'; url: string }
+  | { type: 'image'; url?: string; data?: string; mediaType?: string; caption?: string }
+  | { type: 'audio'; url: string; duration?: number }
   | { type: 'interactive'; payload: InteractivePayload }
 
 export interface InteractivePayload {

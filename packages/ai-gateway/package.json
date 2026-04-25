@@ -8,6 +8,7 @@
     "./providers": "./src/providers/index.ts",
     "./embeddings": "./src/embeddings/index.ts",
     "./rag": "./src/rag/index.ts",
+    "./transcription": "./src/transcription/index.ts",
     "./context": "./src/context/index.ts",
     "./prompts": "./src/prompts/index.ts"
   },
