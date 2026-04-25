@@ -20,6 +20,7 @@ import type {
 import { IdentityResolver } from '@perpetuo/core'
 import type { ConversationRepository, DiagnosticRepository } from '@perpetuo/database'
 import type { Logger } from 'pino'
+import { DiagnosticHandler } from './diagnostic-handler.js'
 
 export interface PipelineContext {
   message: IncomingMessage
@@ -70,10 +71,12 @@ export interface PipelineDependencies {
 export class MessagePipeline {
   private readonly identityResolver: IdentityResolver
   private readonly contextBuilder: ContextBuilder
+  private readonly diagnosticHandler: DiagnosticHandler | null
 
   constructor(private readonly deps: PipelineDependencies) {
     this.identityResolver = new IdentityResolver(deps.userRepo)
     this.contextBuilder = new ContextBuilder({ maxHistoryMessages: 20 })
+    this.diagnosticHandler = deps.diagnosticRepo ? new DiagnosticHandler(deps.diagnosticRepo) : null
   }
 
   async process(rawPayload: unknown, signature: string): Promise<PipelineResult> {
@@ -147,9 +150,13 @@ export class MessagePipeline {
     // Salva mensagem do usuário
     await this.saveUserMessage(conversation?.id, message, messageText)
 
-    // Busca histórico e RAG
+    // Busca histórico
     const history = await this.getConversationHistory(user.id, conversation?.id)
-    const ragContext = await this.searchRAG(messageText)
+
+    // Busca RAG (apenas se diagnóstico completo)
+    const ragContext = userContext.diagnosisCompleted
+      ? await this.searchRAG(messageText)
+      : undefined
 
     // Seleciona prompt e monta contexto
     const systemPrompt = this.selectSystemPrompt(userContext, history)
@@ -167,15 +174,59 @@ export class MessagePipeline {
       temperature: 0.7,
     })
 
-    // Salva resposta da IA
-    await this.saveAIResponse(conversation?.id, result)
+    // Processa diagnóstico se IA indicou conclusão
+    const finalContent = await this.processDiagnosisIfComplete(user, result.content, history)
+
+    // Salva resposta da IA (com conteúdo processado)
+    await this.saveAIResponse(conversation?.id, { ...result, content: finalContent })
 
     // Registra interação na jornada
     if (this.deps.diagnosticRepo && userContext.diagnosisCompleted) {
       await this.deps.diagnosticRepo.recordInteraction(user.id).catch(() => {})
     }
 
-    return result.content
+    return finalContent
+  }
+
+  /**
+   * Processa diagnóstico quando IA indica conclusão com [PERFIL:arquetipo]
+   */
+  private async processDiagnosisIfComplete(
+    user: User,
+    aiResponse: string,
+    history: ConversationHistory,
+  ): Promise<string> {
+    // Detecta marcador [PERFIL:arquetipo]
+    const match = aiResponse.match(/^\[PERFIL:(provedor|aventureiro|romantico|racional)\]/i)
+    if (!match || !this.diagnosticHandler) return aiResponse
+
+    const archetype = match[1].toLowerCase() as
+      | 'provedor'
+      | 'aventureiro'
+      | 'romantico'
+      | 'racional'
+
+    this.deps.logger.info({ userId: user.id, archetype }, 'Diagnosis completed by AI')
+
+    // Extrai respostas do histórico para registro
+    const answers = this.diagnosticHandler.extractAnswersFromHistory(history)
+
+    // Salva diagnóstico com scores baseados no arquétipo detectado
+    const scores = this.generateScoresForArchetype(archetype)
+    await this.diagnosticHandler.saveDiagnosis(user.id, archetype, scores, answers)
+
+    // Remove o marcador da resposta
+    return aiResponse.replace(/^\[PERFIL:\w+\]\s*/i, '')
+  }
+
+  /**
+   * Gera scores representativos para o arquétipo identificado pela IA
+   */
+  private generateScoresForArchetype(
+    archetype: 'provedor' | 'aventureiro' | 'romantico' | 'racional',
+  ) {
+    const baseScores = { provedor: 4, aventureiro: 4, romantico: 4, racional: 4 }
+    return { ...baseScores, [archetype]: 9 }
   }
 
   private async saveUserMessage(
@@ -346,7 +397,7 @@ export class MessagePipeline {
       return ISABELA_GREETING
     }
 
-    // Ainda não fez diagnóstico
+    // Ainda não fez diagnóstico - IA conduz naturalmente
     if (!context.diagnosisCompleted) {
       return DIAGNOSIS_INTRO
     }

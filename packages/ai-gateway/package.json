@@ -10,7 +10,8 @@
     "./rag": "./src/rag/index.ts",
     "./transcription": "./src/transcription/index.ts",
     "./context": "./src/context/index.ts",
-    "./prompts": "./src/prompts/index.ts"
+    "./prompts": "./src/prompts/index.ts",
+    "./diagnostic": "./src/diagnostic/index.ts"
   },
   "scripts": {
     "build": "tsc",

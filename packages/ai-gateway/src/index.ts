@@ -53,3 +53,12 @@ export {
   DAILY_CHECKIN,
   type JourneyDay,
 } from './prompts/index.js'
+
+// Diagnostic Service
+export {
+  DiagnosticService,
+  type DiagnosticAnswer,
+  type DiagnosticResult,
+  type DiagnosticScores,
+  type DiagnosticState,
+} from './diagnostic/index.js'
