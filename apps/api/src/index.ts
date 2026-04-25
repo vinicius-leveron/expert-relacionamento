@@ -1,5 +1,5 @@
 import { serve } from '@hono/node-server'
-import type { UserRepository } from '@perpetuo/core'
+import type { AIProviderPort, UserRepository } from '@perpetuo/core'
 import { Hono } from 'hono'
 import { logger as honoLogger } from 'hono/logger'
 import pino from 'pino'
@@ -12,6 +12,17 @@ const createUserRepository = async () => {
   const { createSupabaseClient, SupabaseUserRepository } = await import('@perpetuo/database')
   const supabase = createSupabaseClient()
   return new SupabaseUserRepository(supabase)
+}
+
+const createAIProvider = async (): Promise<AIProviderPort> => {
+  // Se tem API key, usa Anthropic real
+  if (process.env.ANTHROPIC_API_KEY) {
+    const { AnthropicAdapter } = await import('@perpetuo/ai-gateway')
+    return new AnthropicAdapter()
+  }
+  // Senão, usa mock
+  const { MockAIAdapter } = await import('@perpetuo/ai-gateway')
+  return new MockAIAdapter()
 }
 
 const logger = pino({
@@ -33,10 +44,23 @@ async function main() {
     userRepo = createMockUserRepository()
   }
 
+  // AI Provider (real ou mock baseado em env)
+  const aiProvider = await createAIProvider()
+  if (aiProvider.providerName === 'mock') {
+    logger.warn('ANTHROPIC_API_KEY not set, using mock AI provider')
+  } else {
+    logger.info(`Using ${aiProvider.providerName} AI provider`)
+  }
+
   // TODO: Substituir por adapter real após ADR 0001
   const channelAdapter = new MockChannelAdapter()
 
-  const pipeline = new MessagePipeline(channelAdapter, userRepo, logger)
+  const pipeline = new MessagePipeline({
+    channel: channelAdapter,
+    userRepo,
+    aiProvider,
+    logger,
+  })
 
   const app = new Hono()
 

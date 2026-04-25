@@ -9,6 +9,7 @@
   "references": [
     { "path": "../../packages/core" },
     { "path": "../../packages/database" },
+    { "path": "../../packages/ai-gateway" },
     { "path": "../../packages/channels/whatsapp-adapter" }
   ]
 }
