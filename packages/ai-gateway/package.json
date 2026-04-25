@@ -6,6 +6,8 @@
   "exports": {
     ".": "./src/index.ts",
     "./providers": "./src/providers/index.ts",
+    "./embeddings": "./src/embeddings/index.ts",
+    "./rag": "./src/rag/index.ts",
     "./context": "./src/context/index.ts",
     "./prompts": "./src/prompts/index.ts"
   },
@@ -16,7 +18,8 @@
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.32.0",
-    "@perpetuo/core": "workspace:*"
+    "@perpetuo/core": "workspace:*",
+    "@supabase/supabase-js": "^2.45.0"
   },
   "devDependencies": {
     "vitest": "^2.0.0"

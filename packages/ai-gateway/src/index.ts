@@ -1,6 +1,23 @@
-// Providers
+// AI Providers
 export { AnthropicAdapter, type AnthropicConfig } from './providers/anthropic.adapter.js'
 export { MockAIAdapter } from './providers/mock.adapter.js'
+
+// Embeddings
+export {
+  type EmbeddingPort,
+  type EmbeddingResult,
+  OpenAIEmbeddingAdapter,
+  type OpenAIEmbeddingConfig,
+  MockEmbeddingAdapter,
+} from './embeddings/index.js'
+
+// RAG
+export {
+  RAGService,
+  type RAGServiceConfig,
+  type RAGSearchOptions,
+  type KnowledgeChunk,
+} from './rag/index.js'
 
 // Context
 export {

@@ -85,6 +85,9 @@ importers:
       '@perpetuo/core':
         specifier: workspace:*
         version: link:../core
+      '@supabase/supabase-js':
+        specifier: ^2.45.0
+        version: 2.104.1
     devDependencies:
       vitest:
         specifier: ^2.0.0
