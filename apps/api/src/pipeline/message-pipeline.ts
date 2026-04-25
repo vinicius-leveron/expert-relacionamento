@@ -1,10 +1,13 @@
 import {
+  type Archetype,
   ContextBuilder,
   type ConversationHistory,
+  DIAGNOSIS_INTRO,
   ISABELA_GREETING,
   ISABELA_RETURNING,
   type RAGService,
   type UserContext,
+  getJourneyPrompt,
 } from '@perpetuo/ai-gateway'
 import type {
   AIProviderPort,
@@ -15,6 +18,7 @@ import type {
   UserRepository,
 } from '@perpetuo/core'
 import { IdentityResolver } from '@perpetuo/core'
+import type { ConversationRepository, DiagnosticRepository } from '@perpetuo/database'
 import type { Logger } from 'pino'
 
 export interface PipelineContext {
@@ -41,8 +45,11 @@ export interface PipelineDependencies {
   userRepo: UserRepository
   aiProvider: AIProviderPort
   logger: Logger
-  rag?: RAGService // Opcional - se não tiver, não faz busca semântica
-  transcriber?: TranscriptionService // Opcional - para áudio
+  // Opcional - degradação graciosa se não configurado
+  rag?: RAGService
+  transcriber?: TranscriptionService
+  conversationRepo?: ConversationRepository
+  diagnosticRepo?: DiagnosticRepository
 }
 
 /**
@@ -51,11 +58,14 @@ export interface PipelineDependencies {
  * Fluxo:
  * 1. receive -> validate webhook
  * 2. resolve identity (phone -> user_id)
- * 3. extract content (text, image, audio -> transcribe)
- * 4. RAG search (busca conhecimento relevante)
- * 5. build context (system prompt + RAG + history)
- * 6. process with AI
- * 7. respond via channel
+ * 3. get/create conversation
+ * 4. extract content (text, image, audio -> transcribe)
+ * 5. save user message
+ * 6. RAG search (busca conhecimento relevante)
+ * 7. build context (system prompt + RAG + history)
+ * 8. process with AI
+ * 9. save AI response
+ * 10. respond via channel
  */
 export class MessagePipeline {
   private readonly identityResolver: IdentityResolver
@@ -124,37 +134,30 @@ export class MessagePipeline {
   }
 
   private async processWithAI(message: IncomingMessage, user: User): Promise<string> {
-    const userContext = this.buildUserContext(user)
-    const history = await this.getConversationHistory(user.id)
+    // Busca/cria conversa e contexto do usuário
+    const conversation = this.deps.conversationRepo
+      ? await this.deps.conversationRepo.getOrCreateActive(user.id, message.channelType)
+      : null
 
-    // Extrai conteúdo da mensagem (texto, imagem, ou transcrição de áudio)
+    const userContext = await this.buildUserContext(user)
+
+    // Extrai conteúdo da mensagem
     const { text: messageText, contentBlocks } = await this.extractMessageContent(message)
 
-    // Busca conhecimento relevante via RAG (se disponível)
-    let ragContext: string | undefined
-    if (this.deps.rag && messageText) {
-      try {
-        const chunks = await this.deps.rag.search(messageText, {
-          matchThreshold: 0.7,
-          matchCount: 3,
-        })
-        ragContext = this.deps.rag.formatForContext(chunks)
-        this.deps.logger.debug({ chunksFound: chunks.length }, 'RAG search completed')
-      } catch (error) {
-        this.deps.logger.warn({ error }, 'RAG search failed, continuing without')
-      }
-    }
+    // Salva mensagem do usuário
+    await this.saveUserMessage(conversation?.id, message, messageText)
 
-    // Seleciona prompt baseado no estado
+    // Busca histórico e RAG
+    const history = await this.getConversationHistory(user.id, conversation?.id)
+    const ragContext = await this.searchRAG(messageText)
+
+    // Seleciona prompt e monta contexto
     const systemPrompt = this.selectSystemPrompt(userContext, history)
-
-    // Monta mensagens para a IA
-    const currentMessage = contentBlocks ?? messageText
     const messages = this.contextBuilder.build({
       systemPrompt,
       userContext,
       history,
-      currentMessage,
+      currentMessage: contentBlocks ?? messageText,
       ragContext,
     })
 
@@ -164,7 +167,71 @@ export class MessagePipeline {
       temperature: 0.7,
     })
 
+    // Salva resposta da IA
+    await this.saveAIResponse(conversation?.id, result)
+
+    // Registra interação na jornada
+    if (this.deps.diagnosticRepo && userContext.diagnosisCompleted) {
+      await this.deps.diagnosticRepo.recordInteraction(user.id).catch(() => {})
+    }
+
     return result.content
+  }
+
+  private async saveUserMessage(
+    conversationId: string | undefined,
+    message: IncomingMessage,
+    messageText: string,
+  ): Promise<void> {
+    if (!conversationId || !this.deps.conversationRepo) return
+
+    const contentType =
+      message.content.type === 'image'
+        ? 'image'
+        : message.content.type === 'audio'
+          ? 'audio'
+          : 'text'
+
+    await this.deps.conversationRepo.addMessage({
+      conversationId,
+      role: 'user',
+      content: messageText,
+      contentType,
+    })
+  }
+
+  private async searchRAG(query: string): Promise<string | undefined> {
+    if (!this.deps.rag || !query) return undefined
+
+    try {
+      const chunks = await this.deps.rag.search(query, {
+        matchThreshold: 0.7,
+        matchCount: 3,
+      })
+      this.deps.logger.debug({ chunksFound: chunks.length }, 'RAG search completed')
+      return this.deps.rag.formatForContext(chunks)
+    } catch (error) {
+      this.deps.logger.warn({ error }, 'RAG search failed, continuing without')
+      return undefined
+    }
+  }
+
+  private async saveAIResponse(
+    conversationId: string | undefined,
+    result: { content: string; usage: { inputTokens: number; outputTokens: number } },
+  ): Promise<void> {
+    if (!conversationId || !this.deps.conversationRepo) return
+
+    await this.deps.conversationRepo.addMessage({
+      conversationId,
+      role: 'assistant',
+      content: result.content,
+      contentType: 'text',
+      metadata: {
+        inputTokens: result.usage.inputTokens,
+        outputTokens: result.usage.outputTokens,
+      },
+    })
   }
 
   /**
@@ -178,12 +245,10 @@ export class MessagePipeline {
     }
 
     if (message.content.type === 'image') {
-      // Se não tem dados base64, só retorna texto
       if (!message.content.data || !message.content.mediaType) {
         return { text: message.content.caption ?? '[Imagem recebida - dados não disponíveis]' }
       }
 
-      // Para imagens com base64, retorna os blocos de conteúdo para análise multimodal
       const blocks: ContentBlock[] = [
         {
           type: 'image',
@@ -205,7 +270,6 @@ export class MessagePipeline {
     }
 
     if (message.content.type === 'audio') {
-      // Transcreve áudio se tiver transcriber
       if (this.deps.transcriber) {
         try {
           const transcription = await this.deps.transcriber.transcribe(message.content.url)
@@ -221,31 +285,78 @@ export class MessagePipeline {
     return { text: '[Mensagem não suportada]' }
   }
 
-  private buildUserContext(user: User): UserContext {
-    // TODO: Buscar dados reais do banco (arquétipo, dia da jornada, etc)
+  private async buildUserContext(user: User): Promise<UserContext> {
+    // Se não tem repo de diagnóstico, retorna contexto padrão
+    if (!this.deps.diagnosticRepo) {
+      return {
+        userId: user.id,
+        diagnosisCompleted: false,
+        currentDayInJourney: 0,
+      }
+    }
+
+    // Busca diagnóstico
+    const diagnostic = await this.deps.diagnosticRepo.getByUserId(user.id)
+    if (!diagnostic) {
+      return {
+        userId: user.id,
+        diagnosisCompleted: false,
+        currentDayInJourney: 0,
+      }
+    }
+
+    // Busca progresso na jornada
+    const journey = await this.deps.diagnosticRepo.getJourneyProgress(user.id)
+
     return {
       userId: user.id,
-      diagnosisCompleted: false,
-      currentDayInJourney: 0,
+      archetype: diagnostic.archetype,
+      diagnosisCompleted: true,
+      currentDayInJourney: journey?.currentDay ?? 0,
     }
   }
 
-  private async getConversationHistory(_userId: string): Promise<ConversationHistory> {
-    // TODO: Buscar histórico real do banco
-    return {
-      messages: [],
+  private async getConversationHistory(
+    userId: string,
+    conversationId?: string,
+  ): Promise<ConversationHistory> {
+    if (!this.deps.conversationRepo || !conversationId) {
+      return { messages: [] }
+    }
+
+    try {
+      const messages = await this.deps.conversationRepo.getRecentMessages(conversationId, 20)
+
+      return {
+        messages: messages.map((m) => ({
+          role: m.role,
+          content: m.content,
+          timestamp: m.createdAt,
+        })),
+      }
+    } catch (error) {
+      this.deps.logger.warn({ error }, 'Failed to get conversation history')
+      return { messages: [] }
     }
   }
 
   private selectSystemPrompt(context: UserContext, history: ConversationHistory): string {
+    // Primeiro contato
     if (history.messages.length === 0) {
       return ISABELA_GREETING
     }
 
+    // Ainda não fez diagnóstico
     if (!context.diagnosisCompleted) {
-      return ISABELA_RETURNING
+      return DIAGNOSIS_INTRO
     }
 
+    // Tem arquétipo - usa prompt da jornada
+    if (context.archetype) {
+      return getJourneyPrompt(context.archetype as Archetype, context.currentDayInJourney)
+    }
+
+    // Fallback
     return ISABELA_RETURNING
   }
 }
