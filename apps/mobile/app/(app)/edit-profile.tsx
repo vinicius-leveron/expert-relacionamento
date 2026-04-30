@@ -309,7 +309,7 @@ export default function EditProfileScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: colors.gray50,
+    backgroundColor: colors.background,
   },
   scrollView: {
     flex: 1,
@@ -399,7 +399,7 @@ const styles = StyleSheet.create({
   },
   input: {
     height: sizes.inputHeight,
-    backgroundColor: colors.gray50,
+    backgroundColor: colors.background,
     borderRadius: radius.md,
     paddingHorizontal: spacing.md,
     ...typography.body,

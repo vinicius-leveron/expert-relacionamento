@@ -127,7 +127,7 @@ function getLegalContent(document: LegalDocument) {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: colors.gray50,
+    backgroundColor: colors.background,
   },
   header: {
     flexDirection: 'row',
@@ -143,7 +143,7 @@ const styles = StyleSheet.create({
     width: 40,
     height: 40,
     borderRadius: 20,
-    backgroundColor: colors.gray50,
+    backgroundColor: colors.background,
     alignItems: 'center',
     justifyContent: 'center',
   },

@@ -10,9 +10,9 @@ export const colors = {
   // CORES PRIMÁRIAS (Gradiente Tinder)
   // ============================================
   primary: '#FE3C72', // Rosa Tinder
-  primaryDark: '#FF655B', // Laranja-rosa
-  primaryLight: '#FF7854', // Laranja claro
-  primaryGradient: ['#FE3C72', '#FF655B', '#FF7854'] as const,
+  primaryDark: '#E91E63', // Rosa escuro
+  primaryLight: '#FF6B8A', // Rosa claro
+  primaryGradient: ['#FE3C72', '#FF6B8A'] as const,
 
   // Accent (dourado premium)
   accent: '#FFD700',

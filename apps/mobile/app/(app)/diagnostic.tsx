@@ -232,7 +232,7 @@ export default function DiagnosticScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: colors.gray50,
+    backgroundColor: colors.background,
   },
   introContainer: {
     flex: 1,

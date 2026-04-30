@@ -136,7 +136,7 @@ const styles = StyleSheet.create({
   option: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: colors.gray50,
+    backgroundColor: colors.background,
     borderRadius: radius.md,
     padding: spacing.md,
     borderWidth: 2,

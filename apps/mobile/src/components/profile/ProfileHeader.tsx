@@ -114,7 +114,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     borderRadius: radius.full,
-    backgroundColor: colors.gray50,
+    backgroundColor: colors.background,
   },
   avatarContainer: {
     position: 'relative',

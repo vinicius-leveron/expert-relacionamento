@@ -47,7 +47,7 @@ const styles = StyleSheet.create({
     width: '47%',
     alignItems: 'center',
     padding: spacing.md,
-    backgroundColor: colors.gray50,
+    backgroundColor: colors.background,
     borderRadius: radius.md,
   },
   iconContainer: {

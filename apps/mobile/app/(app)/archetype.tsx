@@ -208,7 +208,7 @@ export default function ArchetypeDetailScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: colors.gray50,
+    backgroundColor: colors.background,
   },
   header: {
     flexDirection: 'row',

@@ -224,7 +224,7 @@ const styles = StyleSheet.create({
     borderRadius: 18,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: colors.gray50,
+    backgroundColor: colors.background,
     borderWidth: 1,
     borderColor: colors.border,
   },
