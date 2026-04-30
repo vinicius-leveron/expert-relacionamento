@@ -113,6 +113,19 @@ export interface ConversationRepository {
 export class SupabaseConversationRepository implements ConversationRepository {
   constructor(private readonly supabase: SupabaseClient) {}
 
+  private isMissingRelationError(message?: string): boolean {
+    if (!message) {
+      return false
+    }
+
+    return (
+      message.includes("Could not find the table 'public.message_attachments' in the schema cache") ||
+      message.includes("Could not find the table 'public.chat_attachments' in the schema cache") ||
+      message.includes('relation "message_attachments" does not exist') ||
+      message.includes('relation "chat_attachments" does not exist')
+    )
+  }
+
   async create(params: { userId: string; channel: string }): Promise<Conversation> {
     const { data, error } = await this.supabase
       .from('conversations')
@@ -370,6 +383,9 @@ export class SupabaseConversationRepository implements ConversationRepository {
       .in('message_id', messageIds)
 
     if (linksError) {
+      if (this.isMissingRelationError(linksError.message)) {
+        return result
+      }
       throw new Error(`Failed to load message attachments: ${linksError.message}`)
     }
 
@@ -384,6 +400,9 @@ export class SupabaseConversationRepository implements ConversationRepository {
       .in('id', attachmentIds)
 
     if (attachmentsError) {
+      if (this.isMissingRelationError(attachmentsError.message)) {
+        return result
+      }
       throw new Error(`Failed to load attachments: ${attachmentsError.message}`)
     }
 
