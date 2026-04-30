@@ -3,6 +3,8 @@ import { View, Text, StyleSheet, ActivityIndicator } from 'react-native';
 import { useLocalSearchParams, router } from 'expo-router';
 import { useAuthStore } from '@/stores/auth.store';
 
+const processedMagicLinkTokens = new Set<string>();
+
 export default function VerifyScreen() {
   const { token } = useLocalSearchParams<{ token: string }>();
   const { verifyMagicLink } = useAuthStore();
@@ -21,7 +23,12 @@ export default function VerifyScreen() {
       return;
     }
 
+    if (processedMagicLinkTokens.has(normalizedToken)) {
+      return;
+    }
+
     hasAttemptedVerification.current = true;
+    processedMagicLinkTokens.add(normalizedToken);
 
     verifyMagicLink(normalizedToken)
       .then(() => {
@@ -29,7 +36,6 @@ export default function VerifyScreen() {
       })
       .catch(() => {
         setError('Link inválido ou expirado. Solicite um novo.');
-        hasAttemptedVerification.current = false;
       });
   }, [token, verifyMagicLink]);
 
