@@ -7,10 +7,13 @@ import {
   ScrollView,
   TouchableOpacity,
   Animated,
+  Platform,
 } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { colors, spacing, typography, radius, getShadow, sizes } from '@/theme';
+
+const USE_NATIVE_DRIVER = Platform.OS !== 'web';
 
 const ARCHETYPES = {
   ansioso: {
@@ -105,18 +108,18 @@ export default function DiagnosticResultScreen() {
       Animated.timing(scaleAnim, {
         toValue: 1,
         duration: 500,
-        useNativeDriver: true,
+        useNativeDriver: USE_NATIVE_DRIVER,
       }),
       Animated.parallel([
         Animated.timing(fadeAnim, {
           toValue: 1,
           duration: 400,
-          useNativeDriver: true,
+          useNativeDriver: USE_NATIVE_DRIVER,
         }),
         Animated.timing(slideAnim, {
           toValue: 0,
           duration: 400,
-          useNativeDriver: true,
+          useNativeDriver: USE_NATIVE_DRIVER,
         }),
       ]),
     ]).start();
@@ -150,7 +153,7 @@ export default function DiagnosticResultScreen() {
             },
           ]}
         >
-          <Text style={styles.label}>Seu arquétipo é</Text>
+          <Text style={styles.label}>Seu padrão dominante hoje é</Text>
           <Text style={[styles.title, { color: archetype.color }]}>
             {archetype.name}
           </Text>
@@ -160,7 +163,7 @@ export default function DiagnosticResultScreen() {
           <View style={styles.section}>
             <View style={styles.sectionHeader}>
               <Ionicons name="star" size={20} color={colors.success} />
-              <Text style={styles.sectionTitle}>Pontos Fortes</Text>
+              <Text style={styles.sectionTitle}>Forças que já existem em você</Text>
             </View>
             {archetype.strengths.map((item, index) => (
               <View key={index} style={styles.listItem}>
@@ -174,7 +177,7 @@ export default function DiagnosticResultScreen() {
           <View style={styles.section}>
             <View style={styles.sectionHeader}>
               <Ionicons name="alert-circle" size={20} color={colors.warning} />
-              <Text style={styles.sectionTitle}>Desafios</Text>
+              <Text style={styles.sectionTitle}>Pontos de atenção</Text>
             </View>
             {archetype.challenges.map((item, index) => (
               <View key={index} style={styles.listItem}>
@@ -187,7 +190,7 @@ export default function DiagnosticResultScreen() {
           {/* Focus */}
           <View style={styles.focusCard}>
             <Ionicons name="bulb" size={24} color={colors.primary} />
-            <Text style={styles.focusTitle}>Foco de Crescimento</Text>
+            <Text style={styles.focusTitle}>Próximo passo mais útil</Text>
             <Text style={styles.focusText}>{archetype.focus}</Text>
           </View>
         </Animated.View>
@@ -200,7 +203,7 @@ export default function DiagnosticResultScreen() {
           onPress={handleContinue}
           activeOpacity={0.8}
         >
-          <Text style={styles.buttonText}>Começar Jornada de 30 Dias</Text>
+          <Text style={styles.buttonText}>Ver meu plano inicial</Text>
           <Ionicons name="arrow-forward" size={20} color={colors.white} />
         </TouchableOpacity>
       </View>

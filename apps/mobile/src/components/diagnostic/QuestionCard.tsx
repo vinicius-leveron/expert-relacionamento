@@ -1,6 +1,8 @@
 import { useRef, useEffect } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Animated } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Animated, Platform } from 'react-native';
 import { colors, spacing, radius, typography, getShadow } from '@/theme';
+
+const USE_NATIVE_DRIVER = Platform.OS !== 'web';
 
 export interface DiagnosticOption {
   id: string;
@@ -11,6 +13,7 @@ export interface DiagnosticOption {
 export interface DiagnosticQuestion {
   id: string;
   question: string;
+  helperText?: string;
   options: DiagnosticOption[];
 }
 
@@ -39,12 +42,12 @@ export function QuestionCard({
         Animated.timing(fadeAnim, {
           toValue: 1,
           duration: 300,
-          useNativeDriver: true,
+          useNativeDriver: USE_NATIVE_DRIVER,
         }),
         Animated.timing(slideAnim, {
           toValue: 0,
           duration: 300,
-          useNativeDriver: true,
+          useNativeDriver: USE_NATIVE_DRIVER,
         }),
       ]).start();
     }
@@ -62,6 +65,9 @@ export function QuestionCard({
     >
       <View style={styles.card}>
         <Text style={styles.question}>{question.question}</Text>
+        {question.helperText ? (
+          <Text style={styles.helperText}>{question.helperText}</Text>
+        ) : null}
 
         <View style={styles.options}>
           {question.options.map((option, index) => {
@@ -113,8 +119,16 @@ const styles = StyleSheet.create({
     ...typography.h2,
     color: colors.textPrimary,
     textAlign: 'center',
-    marginBottom: spacing.xl,
+    marginBottom: spacing.sm,
     fontFamily: 'Inter_600SemiBold',
+  },
+  helperText: {
+    ...typography.bodySmall,
+    color: colors.textSecondary,
+    textAlign: 'center',
+    marginBottom: spacing.xl,
+    fontFamily: 'Inter_400Regular',
+    lineHeight: 20,
   },
   options: {
     gap: spacing.sm,

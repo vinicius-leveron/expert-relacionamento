@@ -20,20 +20,20 @@ const slides = [
   {
     id: '1',
     icon: 'heart-circle' as const,
-    title: 'Descubra seu perfil',
-    description: 'Entenda seus padrões de relacionamento com um diagnóstico rápido.',
+    title: 'Entenda seu padrão relacional',
+    description: 'Faça um diagnóstico curto para descobrir onde você se sabota e por onde começar.',
   },
   {
     id: '2',
     icon: 'chatbubbles' as const,
-    title: 'Orientação personalizada',
-    description: 'Receba conselhos da Isabela, sua coach de relacionamentos.',
+    title: 'Converse com a Isabela',
+    description: 'Receba direção prática para conversas, conflitos, reconquista e clareza emocional.',
   },
   {
     id: '3',
     icon: 'calendar' as const,
-    title: 'Evolua em 30 dias',
-    description: 'Uma jornada com exercícios práticos para transformar seus relacionamentos.',
+    title: 'Ganhe um plano de evolução',
+    description: 'A jornada organiza o próximo passo certo para você, sem conselho genérico.',
   },
 ];
 

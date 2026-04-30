@@ -14,57 +14,63 @@ import { colors, spacing, typography, radius, getShadow } from '@/theme';
 const QUESTIONS: DiagnosticQuestion[] = [
   {
     id: '1',
-    question: 'Como você geralmente reage quando seu parceiro(a) não responde suas mensagens rapidamente?',
+    question: 'Quando a pessoa esfria, demora para responder ou some um pouco, o que costuma acontecer com você?',
+    helperText: 'Escolha a reação que mais parece com você na prática.',
     options: [
-      { id: '1a', text: 'Fico ansioso e mando mais mensagens', value: 'ansioso' },
-      { id: '1b', text: 'Não me incomodo, sei que ela está ocupada', value: 'seguro' },
-      { id: '1c', text: 'Prefiro nem mandar mensagem para evitar rejeição', value: 'evitante' },
-      { id: '1d', text: 'Depende do meu humor no dia', value: 'desorganizado' },
+      { id: '1a', text: 'Minha cabeça acelera e eu sinto vontade de insistir para ter uma resposta.', value: 'ansioso' },
+      { id: '1b', text: 'Eu noto, mas consigo esperar sem perder o eixo.', value: 'seguro' },
+      { id: '1c', text: 'Eu me fecho rápido e penso “deixa pra lá”.', value: 'evitante' },
+      { id: '1d', text: 'Uma hora quero correr atrás, outra hora quero sumir também.', value: 'desorganizado' },
     ],
   },
   {
     id: '2',
-    question: 'Em um relacionamento, você costuma:',
+    question: 'Quando a relação começa a ficar séria de verdade, qual tendência aparece mais em você?',
+    helperText: 'Pense no início da intimidade, não no ideal que você gostaria de ter.',
     options: [
-      { id: '2a', text: 'Buscar proximidade e validação constantemente', value: 'ansioso' },
-      { id: '2b', text: 'Manter equilíbrio entre proximidade e independência', value: 'seguro' },
-      { id: '2c', text: 'Valorizar muito sua independência e espaço pessoal', value: 'evitante' },
-      { id: '2d', text: 'Alternar entre querer muita proximidade e se afastar', value: 'desorganizado' },
+      { id: '2a', text: 'Eu preciso de sinais frequentes de que está tudo bem entre nós.', value: 'ansioso' },
+      { id: '2b', text: 'Eu consigo me envolver sem perder meu equilíbrio.', value: 'seguro' },
+      { id: '2c', text: 'Eu começo a sentir necessidade de mais espaço e menos cobrança.', value: 'evitante' },
+      { id: '2d', text: 'Eu quero proximidade, mas fico desconfiado e mudo rápido.', value: 'desorganizado' },
     ],
   },
   {
     id: '3',
-    question: 'Quando surgem conflitos no relacionamento, você:',
+    question: 'Num conflito ou conversa difícil, como você tende a reagir?',
+    helperText: 'Marque o padrão mais comum, mesmo que você não goste dele.',
     options: [
-      { id: '3a', text: 'Precisa resolver tudo imediatamente', value: 'ansioso' },
-      { id: '3b', text: 'Consegue discutir com calma e encontrar soluções', value: 'seguro' },
-      { id: '3c', text: 'Prefere evitar ou minimizar o conflito', value: 'evitante' },
-      { id: '3d', text: 'Às vezes explode, às vezes se fecha', value: 'desorganizado' },
+      { id: '3a', text: 'Eu preciso resolver na hora, senão fico muito inquieto.', value: 'ansioso' },
+      { id: '3b', text: 'Eu consigo ouvir, falar e tentar construir uma solução.', value: 'seguro' },
+      { id: '3c', text: 'Eu tendo a evitar, adiar ou agir como se não fosse tão importante.', value: 'evitante' },
+      { id: '3d', text: 'Ou eu explodo, ou travo completamente.', value: 'desorganizado' },
     ],
   },
   {
     id: '4',
-    question: 'Como você se sente em relação à intimidade emocional?',
+    question: 'Quando você gosta muito de alguém, qual é o seu maior incômodo interno?',
+    helperText: 'Aqui o foco é no medo que mais te organiza por dentro.',
     options: [
-      { id: '4a', text: 'Desejo muito, mas tenho medo de ser abandonado', value: 'ansioso' },
-      { id: '4b', text: 'Me sinto confortável sendo vulnerável', value: 'seguro' },
-      { id: '4c', text: 'Me sinto desconfortável quando fica muito íntimo', value: 'evitante' },
-      { id: '4d', text: 'Quero, mas ao mesmo tempo me assusta', value: 'desorganizado' },
+      { id: '4a', text: 'Medo de perder a pessoa e ficar sem chão.', value: 'ansioso' },
+      { id: '4b', text: 'Não é tão difícil me abrir e continuar sendo eu mesmo.', value: 'seguro' },
+      { id: '4c', text: 'Sentir que estão entrando demais no meu espaço ou me cobrando demais.', value: 'evitante' },
+      { id: '4d', text: 'Querer intimidade e, ao mesmo tempo, sentir medo dela.', value: 'desorganizado' },
     ],
   },
   {
     id: '5',
-    question: 'Quando o relacionamento termina, você geralmente:',
+    question: 'Depois de um término, qual costuma ser seu movimento mais automático?',
+    helperText: 'Não pense no que você posta; pense no que acontece por dentro.',
     options: [
-      { id: '5a', text: 'Sofro muito e tenho dificuldade em seguir em frente', value: 'ansioso' },
-      { id: '5b', text: 'Processo a dor e eventualmente sigo em frente', value: 'seguro' },
-      { id: '5c', text: 'Sigo em frente rapidamente, "supero" logo', value: 'evitante' },
-      { id: '5d', text: 'Fico confuso, às vezes aliviado, às vezes devastado', value: 'desorganizado' },
+      { id: '5a', text: 'Eu fico preso, revisitando tudo e tentando reabrir a conexão.', value: 'ansioso' },
+      { id: '5b', text: 'Eu sofro, mas consigo elaborar e seguir adiante com o tempo.', value: 'seguro' },
+      { id: '5c', text: 'Eu corto rápido e tento seguir como se já estivesse resolvido.', value: 'evitante' },
+      { id: '5d', text: 'Eu oscilo: uma hora alívio, outra hora desespero total.', value: 'desorganizado' },
     ],
   },
 ];
 
 export default function DiagnosticScreen() {
+  const [stage, setStage] = useState<'intro' | 'questions'>('intro');
   const [currentIndex, setCurrentIndex] = useState(0);
   const [answers, setAnswers] = useState<Record<string, string>>({});
 
@@ -81,14 +87,24 @@ export default function DiagnosticScreen() {
   };
 
   const handleBack = () => {
-    if (isFirstQuestion) {
+    if (stage === 'intro') {
       router.back();
+      return;
+    }
+
+    if (isFirstQuestion) {
+      setStage('intro');
     } else {
       setCurrentIndex((prev) => prev - 1);
     }
   };
 
   const handleNext = () => {
+    if (stage === 'intro') {
+      setStage('questions');
+      return;
+    }
+
     if (!selectedOption) return;
 
     if (isLastQuestion) {
@@ -128,7 +144,6 @@ export default function DiagnosticScreen() {
 
   return (
     <SafeAreaView style={styles.container}>
-      {/* Header */}
       <View style={styles.header}>
         <TouchableOpacity
           onPress={handleBack}
@@ -141,33 +156,70 @@ export default function DiagnosticScreen() {
         <View style={styles.headerSpacer} />
       </View>
 
-      {/* Progress */}
-      <ProgressBar current={currentIndex + 1} total={QUESTIONS.length} />
+      {stage === 'intro' ? (
+        <View style={styles.introContainer}>
+          <View style={styles.introHero}>
+            <View style={styles.introAvatar}>
+              <Text style={styles.introAvatarText}>I</Text>
+            </View>
+            <Text style={styles.introEyebrow}>Diagnóstico guiado pela Isabela</Text>
+            <Text style={styles.introTitle}>Antes da jornada, eu preciso entender como você se vincula.</Text>
+            <Text style={styles.introText}>
+              Em 5 perguntas rápidas, eu vou identificar o padrão que mais aparece hoje nos seus relacionamentos.
+              Não existe resposta certa. O objetivo é descobrir onde você se sabota e por onde começar.
+            </Text>
+          </View>
 
-      {/* Question */}
-      <QuestionCard
-        key={currentQuestion.id}
-        question={currentQuestion}
-        selectedOption={selectedOption}
-        onSelectOption={handleSelectOption}
-      />
+          <View style={styles.introBenefits}>
+            <View style={styles.benefitCard}>
+              <Ionicons name="time-outline" size={18} color={colors.primary} />
+              <Text style={styles.benefitTitle}>Leva menos de 2 minutos</Text>
+              <Text style={styles.benefitText}>Sem texto longo e sem enrolação.</Text>
+            </View>
+            <View style={styles.benefitCard}>
+              <Ionicons name="sparkles-outline" size={18} color={colors.primary} />
+              <Text style={styles.benefitTitle}>Entrega direção prática</Text>
+              <Text style={styles.benefitText}>Você sai com um foco claro para melhorar.</Text>
+            </View>
+            <View style={styles.benefitCard}>
+              <Ionicons name="shield-checkmark-outline" size={18} color={colors.primary} />
+              <Text style={styles.benefitTitle}>Sem julgamento</Text>
+              <Text style={styles.benefitText}>É leitura de padrão, não rótulo definitivo.</Text>
+            </View>
+          </View>
+        </View>
+      ) : (
+        <>
+          <ProgressBar current={currentIndex + 1} total={QUESTIONS.length} />
 
-      {/* Footer */}
+          <QuestionCard
+            key={currentQuestion.id}
+            question={currentQuestion}
+            selectedOption={selectedOption}
+            onSelectOption={handleSelectOption}
+          />
+        </>
+      )}
+
       <View style={styles.footer}>
         <TouchableOpacity
           style={[
             styles.nextButton,
-            !selectedOption && styles.nextButtonDisabled,
+            stage === 'questions' && !selectedOption && styles.nextButtonDisabled,
           ]}
           onPress={handleNext}
-          disabled={!selectedOption}
+          disabled={stage === 'questions' && !selectedOption}
           activeOpacity={0.8}
         >
           <Text style={styles.nextButtonText}>
-            {isLastQuestion ? 'Ver Resultado' : 'Próxima'}
+            {stage === 'intro'
+              ? 'Começar diagnóstico'
+              : isLastQuestion
+                ? 'Ver meu resultado'
+                : 'Próxima'}
           </Text>
           <Ionicons
-            name={isLastQuestion ? 'checkmark' : 'arrow-forward'}
+            name={stage === 'questions' && isLastQuestion ? 'checkmark' : 'arrow-forward'}
             size={20}
             color={colors.white}
           />
@@ -181,6 +233,75 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: colors.gray50,
+  },
+  introContainer: {
+    flex: 1,
+    paddingHorizontal: spacing.lg,
+    paddingTop: spacing.lg,
+    paddingBottom: spacing.lg,
+  },
+  introHero: {
+    backgroundColor: colors.white,
+    borderRadius: radius.lg,
+    padding: spacing.lg,
+    ...getShadow('md'),
+  },
+  introAvatar: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    backgroundColor: colors.primary,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: spacing.md,
+  },
+  introAvatarText: {
+    color: colors.white,
+    fontSize: 24,
+    fontFamily: 'Inter_700Bold',
+  },
+  introEyebrow: {
+    ...typography.caption,
+    color: colors.primary,
+    textTransform: 'uppercase',
+    letterSpacing: 0.8,
+    marginBottom: spacing.xs,
+    fontFamily: 'Inter_600SemiBold',
+  },
+  introTitle: {
+    ...typography.h1,
+    color: colors.textPrimary,
+    marginBottom: spacing.sm,
+    fontFamily: 'Inter_700Bold',
+  },
+  introText: {
+    ...typography.body,
+    color: colors.textSecondary,
+    lineHeight: 24,
+    fontFamily: 'Inter_400Regular',
+  },
+  introBenefits: {
+    marginTop: spacing.lg,
+    gap: spacing.sm,
+  },
+  benefitCard: {
+    backgroundColor: colors.white,
+    borderRadius: radius.md,
+    padding: spacing.md,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  benefitTitle: {
+    ...typography.bodyMedium,
+    color: colors.textPrimary,
+    marginTop: spacing.xs,
+    marginBottom: 4,
+    fontFamily: 'Inter_600SemiBold',
+  },
+  benefitText: {
+    ...typography.bodySmall,
+    color: colors.textSecondary,
+    fontFamily: 'Inter_400Regular',
   },
   header: {
     flexDirection: 'row',
