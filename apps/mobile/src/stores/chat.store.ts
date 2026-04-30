@@ -93,6 +93,7 @@ interface ChatState {
   pendingAttachments: ChatAttachment[];
   conversationId: string | null;
   isLoading: boolean;
+  responseStartedAt: number | null;
   isUploadingAttachment: boolean;
   isConnected: boolean;
   eventSource: EventSource | null;
@@ -174,6 +175,52 @@ interface MutationResponse {
 }
 
 const POLL_INTERVAL_MS = 2500;
+const RESPONSE_TIMEOUT_MS = 45_000;
+
+function normalizeMessageText(content: string): string {
+  return content.trim().replace(/\s+/g, ' ');
+}
+
+function matchesServerMessage(localMessage: Message, serverMessage: Message): boolean {
+  if (localMessage.role !== serverMessage.role) {
+    return false;
+  }
+
+  if ((localMessage.contentType ?? 'text') !== (serverMessage.contentType ?? 'text')) {
+    return false;
+  }
+
+  const timeDiffMs = Math.abs(
+    new Date(localMessage.createdAt).getTime() -
+      new Date(serverMessage.createdAt).getTime(),
+  );
+
+  if (timeDiffMs > 2 * 60 * 1000) {
+    return false;
+  }
+
+  const contentType = localMessage.contentType ?? 'text';
+
+  if (contentType === 'audio') {
+    const localDuration = localMessage.audio?.durationMs;
+    const serverDuration = serverMessage.audio?.durationMs;
+
+    if (
+      typeof localDuration === 'number' &&
+      typeof serverDuration === 'number' &&
+      Math.abs(localDuration - serverDuration) <= 3_000
+    ) {
+      return true;
+    }
+
+    return true;
+  }
+
+  return (
+    normalizeMessageText(localMessage.content) ===
+    normalizeMessageText(serverMessage.content)
+  );
+}
 
 function mapServerAttachment(attachment: ServerAttachment): ChatAttachment {
   return {
@@ -231,15 +278,38 @@ function mergeServerMessages(
   currentMessages: Message[],
   serverMessages: Message[],
 ): Message[] {
-  const failedLocalMessages = currentMessages.filter(
+  const localMessagesToPreserve = currentMessages.filter(
     (message) => message.clientState === 'failed',
   );
 
-  if (failedLocalMessages.length === 0) {
-    return serverMessages;
-  }
+  const localSendingMessages = currentMessages.filter(
+    (message) => message.clientState === 'sending',
+  );
 
-  return [...serverMessages, ...failedLocalMessages].sort(
+  const unmatchedSendingMessages = localSendingMessages.filter(
+    (localMessage) =>
+      !serverMessages.some((serverMessage) =>
+        matchesServerMessage(localMessage, serverMessage),
+      ),
+  );
+
+  const mergedMessages = [
+    ...serverMessages,
+    ...unmatchedSendingMessages,
+    ...localMessagesToPreserve,
+  ];
+
+  const dedupedMessages = mergedMessages.filter((message, index) => {
+    return (
+      mergedMessages.findIndex(
+        (candidate) =>
+          candidate.id === message.id &&
+          candidate.createdAt === message.createdAt,
+      ) === index
+    );
+  });
+
+  return dedupedMessages.sort(
     (a, b) =>
       new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime(),
   );
@@ -298,6 +368,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
   pendingAttachments: [],
   conversationId: null,
   isLoading: false,
+  responseStartedAt: null,
   isUploadingAttachment: false,
   isConnected: false,
   eventSource: null,
@@ -337,6 +408,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
           !pendingAttachments.some((pending) => pending.id === attachment.id),
       ),
       isLoading: true,
+      responseStartedAt: Date.now(),
     }));
 
     try {
@@ -371,6 +443,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
             : message,
         ),
         isLoading: false,
+        responseStartedAt: null,
       }));
       throw error;
     }
@@ -399,6 +472,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
     set((state) => ({
       messages: [...state.messages, optimisticUserMessage],
       isLoading: true,
+      responseStartedAt: Date.now(),
     }));
 
     try {
@@ -439,6 +513,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
             : message,
         ),
         isLoading: false,
+        responseStartedAt: null,
       }));
       throw error;
     }
@@ -471,6 +546,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
     set((state) => ({
       messages: [...state.messages, optimisticUserMessage],
       isLoading: true,
+      responseStartedAt: Date.now(),
     }));
 
     try {
@@ -516,6 +592,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
             : message,
         ),
         isLoading: false,
+        responseStartedAt: null,
       }));
       throw error;
     }
@@ -538,6 +615,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
           : item,
       ),
       isLoading: true,
+      responseStartedAt: Date.now(),
     }));
 
     try {
@@ -629,6 +707,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
             : item,
         ),
         isLoading: false,
+        responseStartedAt: null,
       }));
       throw error;
     }
@@ -810,13 +889,36 @@ export const useChatStore = create<ChatState>((set, get) => ({
         attachments: (message.attachments ?? []).map(mapServerAttachment),
       }));
 
-      set((state) => ({
-        messages: mergeServerMessages(state.messages, messages),
-        isLoading:
-          messages[messages.length - 1]?.role === 'assistant'
-            ? false
-            : state.isLoading,
-      }));
+      set((state) => {
+        let mergedMessages = mergeServerMessages(state.messages, messages);
+        const hasAssistantReply = messages[messages.length - 1]?.role === 'assistant';
+        const responseTimedOut =
+          state.responseStartedAt !== null &&
+          Date.now() - state.responseStartedAt >= RESPONSE_TIMEOUT_MS;
+
+        if (responseTimedOut) {
+          console.warn('Chat response timed out while waiting for assistant reply');
+
+          mergedMessages = [
+            ...mergedMessages,
+            {
+              id: `assistant-timeout-${state.responseStartedAt}`,
+              role: 'assistant',
+              content:
+                'Não consegui responder agora. Verifique sua conexão e tente novamente em instantes.',
+              contentType: 'text',
+              createdAt: new Date().toISOString(),
+            },
+          ];
+        }
+
+        return {
+          messages: mergedMessages,
+          isLoading: hasAssistantReply ? false : responseTimedOut ? false : state.isLoading,
+          responseStartedAt:
+            hasAssistantReply || responseTimedOut ? null : state.responseStartedAt,
+        };
+      });
     } catch (error) {
       console.error('Failed to load messages:', error);
     }
@@ -897,6 +999,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
     set((state) => ({
       messages: [...state.messages, message],
       isLoading: false,
+      responseStartedAt: null,
     }));
   },
 }));

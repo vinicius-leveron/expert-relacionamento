@@ -1,5 +1,4 @@
-import { useEffect } from 'react';
-import { router } from 'expo-router';
+import { Redirect } from 'expo-router';
 import { View, ActivityIndicator, StyleSheet } from 'react-native';
 import { Drawer } from 'expo-router/drawer';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
@@ -8,17 +7,7 @@ import { ConversationDrawer } from '@/components/drawer';
 import { colors } from '@/theme';
 
 export default function AppLayout() {
-  const { isAuthenticated, isLoading, checkAuth } = useAuthStore();
-
-  useEffect(() => {
-    checkAuth();
-  }, []);
-
-  useEffect(() => {
-    if (!isLoading && !isAuthenticated) {
-      router.replace('/(auth)/login');
-    }
-  }, [isLoading, isAuthenticated]);
+  const { isAuthenticated, isLoading } = useAuthStore();
 
   if (isLoading) {
     return (
@@ -29,7 +18,7 @@ export default function AppLayout() {
   }
 
   if (!isAuthenticated) {
-    return null;
+    return <Redirect href="/(auth)/login" />;
   }
 
   return (

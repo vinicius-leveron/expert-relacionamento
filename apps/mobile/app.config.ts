@@ -17,8 +17,8 @@ const getBundleId = () => {
 
 const getApiUrl = () => {
   if (IS_DEV) return 'http://localhost:3000/api/v1';
-  if (IS_PREVIEW) return process.env.EXPO_PUBLIC_API_URL_PREVIEW || 'https://api-preview.perpetuo.app/api/v1';
-  return process.env.EXPO_PUBLIC_API_URL || 'https://api.perpetuo.app/api/v1';
+  if (IS_PREVIEW) return process.env.EXPO_PUBLIC_API_URL_PREVIEW || 'https://perpetuo-api-fdrf.onrender.com/api/v1';
+  return process.env.EXPO_PUBLIC_API_URL || 'https://perpetuo-api-fdrf.onrender.com/api/v1';
 };
 
 const getSentryPlugin = () => {

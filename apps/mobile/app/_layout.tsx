@@ -36,24 +36,10 @@ function RootLayout() {
   }, [checkAuth]);
 
   const onLayoutRootView = useCallback(async () => {
-    if (fontsLoaded || fontError) {
+    if ((fontsLoaded || fontError) && !authLoading) {
       await SplashScreen.hideAsync();
     }
-  }, [fontsLoaded, fontError]);
-
-  // Aguarda fontes carregarem
-  if (!fontsLoaded && !fontError) {
-    return null;
-  }
-
-  // Loading de autenticação
-  if (authLoading) {
-    return (
-      <View style={styles.loading} onLayout={onLayoutRootView}>
-        <ActivityIndicator size="large" color={colors.primary} />
-      </View>
-    );
-  }
+  }, [fontsLoaded, fontError, authLoading]);
 
   const content = (
     <Sentry.ErrorBoundary fallback={ErrorFallback}>
@@ -65,6 +51,11 @@ function RootLayout() {
           <Stack.Screen name="(app)" options={{ animation: 'fade' }} />
         </Stack>
         <StatusBar style="auto" />
+        {(!fontsLoaded && !fontError) || authLoading ? (
+          <View style={styles.loadingOverlay} pointerEvents="none">
+            <ActivityIndicator size="large" color={colors.primary} />
+          </View>
+        ) : null}
       </View>
     </Sentry.ErrorBoundary>
   );
@@ -105,6 +96,12 @@ const styles = StyleSheet.create({
   },
   loading: {
     flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: colors.primaryLight,
+  },
+  loadingOverlay: {
+    ...StyleSheet.absoluteFillObject,
     justifyContent: 'center',
     alignItems: 'center',
     backgroundColor: colors.primaryLight,

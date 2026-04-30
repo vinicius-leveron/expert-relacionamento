@@ -567,7 +567,7 @@ export default function ChatScreen() {
           onContentSizeChange={() =>
             flatListRef.current?.scrollToEnd({ animated: false })
           }
-          ListEmptyComponent={EmptyState}
+          ListEmptyComponent={!isLoading ? EmptyState : null}
           ListFooterComponent={<TypingIndicator visible={isLoading} />}
         />
 

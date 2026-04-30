@@ -53,7 +53,7 @@ export default function WelcomeScreen() {
       step: currentIndex + 1,
     });
     if (isLastSlide) {
-      router.replace('/login');
+      router.replace('/(auth)/login');
     } else {
       flatListRef.current?.scrollToIndex({ index: currentIndex + 1 });
     }
@@ -63,7 +63,7 @@ export default function WelcomeScreen() {
     captureAnalyticsEvent('onboarding_skipped', {
       step: currentIndex + 1,
     });
-    router.replace('/login');
+    router.replace('/(auth)/login');
   };
 
   const onViewableItemsChanged = useRef(
