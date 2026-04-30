@@ -1,8 +1,9 @@
 import { useEffect, useRef } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator, Platform } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import { useProfileStore } from '@/stores/profile.store';
+import { SubscriptionRequiredState } from '@/components/paywall';
 import { PhaseProgress, DayCard, StreakCounter } from '@/components/journey';
 import { colors, spacing, typography, radius, getShadow, sizes } from '@/theme';
 import { openCheckoutUrl } from '@/utils/checkout';
@@ -26,7 +27,11 @@ export default function JourneyScreen() {
   }, [fetchProfile]);
 
   const diagnostic = profile?.diagnostic;
+  const hasActiveSubscription = profile?.access.hasActiveSubscription === true;
   const hasJourneyAccess = profile?.access.hasJourneyAccess === true;
+  const nativeCheckoutMode = profile?.commerce.nativeCheckoutMode ?? 'external_link';
+  const canOpenCheckoutInCurrentClient =
+    Platform.OS === 'web' || nativeCheckoutMode === 'external_link';
   const currentDay = 1; // TODO: Get from profile
   const streak = 1; // TODO: Get from profile
   const dailyContent = DAILY_CONTENT[(currentDay - 1) % DAILY_CONTENT.length];
@@ -37,6 +42,43 @@ export default function JourneyScreen() {
       captureAnalyticsEvent('journey_paywall_viewed');
     }
   }, [diagnostic, hasJourneyAccess]);
+
+  if (isLoading && !profile) {
+    return (
+      <View style={styles.container}>
+        <View style={styles.emptyContainer}>
+          <ActivityIndicator size="large" color={colors.primary} />
+        </View>
+      </View>
+    );
+  }
+
+  if (!hasActiveSubscription) {
+    return (
+      <SubscriptionRequiredState
+        title="A jornada faz parte do acesso premium"
+        description="Ative sua assinatura para acompanhar sua evolução, liberar os 30 dias e continuar com suporte guiado."
+        onPrimaryPress={() => {
+          captureAnalyticsEvent('journey_paywall_subscription_clicked');
+          router.push('/(app)/subscription');
+        }}
+        secondaryLabel={
+          profile?.commerce.canUpgrade && canOpenCheckoutInCurrentClient
+            ? 'Ir para checkout'
+            : undefined
+        }
+        onSecondaryPress={
+          profile?.commerce.canUpgrade && canOpenCheckoutInCurrentClient
+            ? () => {
+                captureAnalyticsEvent('journey_paywall_checkout_clicked');
+                void openCheckoutUrl(profile.commerce.checkoutUrl);
+              }
+            : undefined
+        }
+        checkoutBlocked={!canOpenCheckoutInCurrentClient}
+      />
+    );
+  }
 
   if (!diagnostic) {
     return (
@@ -50,45 +92,6 @@ export default function JourneyScreen() {
             Complete o diagnóstico com a Isabela para descobrir seu arquétipo
             e iniciar sua jornada de 30 dias.
           </Text>
-        </View>
-      </View>
-    );
-  }
-
-  if (!hasJourneyAccess) {
-    return (
-      <View style={styles.container}>
-        <View style={styles.emptyContainer}>
-          <View style={styles.lockIcon}>
-            <Ionicons name="lock-closed" size={36} color={colors.primaryDark} />
-          </View>
-          <Text style={styles.emptyTitle}>A jornada completa é premium</Text>
-          <Text style={styles.emptyText}>
-            Você já concluiu o diagnóstico. Agora falta ativar sua assinatura para desbloquear os 30 dias, análises multimodais e contexto com arquivos.
-          </Text>
-          <TouchableOpacity
-            style={styles.primaryButton}
-            onPress={() => {
-              captureAnalyticsEvent('journey_paywall_subscription_clicked');
-              router.push('/(app)/subscription');
-            }}
-            activeOpacity={0.85}
-          >
-            <Text style={styles.primaryButtonText}>Ver assinatura</Text>
-            <Ionicons name="arrow-forward" size={18} color={colors.white} />
-          </TouchableOpacity>
-          {profile?.commerce.canUpgrade ? (
-            <TouchableOpacity
-              style={styles.secondaryButton}
-              onPress={() => {
-                captureAnalyticsEvent('journey_paywall_checkout_clicked');
-                void openCheckoutUrl(profile.commerce.checkoutUrl);
-              }}
-              activeOpacity={0.85}
-            >
-              <Text style={styles.secondaryButtonText}>Ir para checkout</Text>
-            </TouchableOpacity>
-          ) : null}
         </View>
       </View>
     );

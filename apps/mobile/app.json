@@ -1,7 +1,7 @@
 {
   "expo": {
     "name": "Perpétuo",
-    "slug": "perpetuo",
+    "slug": "kosmos",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
@@ -43,6 +43,15 @@
     ],
     "experiments": {
       "typedRoutes": true
+    },
+    "extra": {
+      "apiUrl": "https://perpetuo-api-fdrf.onrender.com/api/v1",
+      "router": {
+        "origin": false
+      },
+      "eas": {
+        "projectId": "a7e13cfb-cc06-4cdf-b407-3ad100fd92a5"
+      }
     }
   }
 }

@@ -1,42 +1,29 @@
-import { useCallback, useMemo } from 'react';
-import {
-  View,
-  Text,
-  StyleSheet,
-  ScrollView,
-  TouchableOpacity,
-  SafeAreaView,
-  Platform,
-} from 'react-native';
+import { useCallback, useEffect } from 'react';
+import { View, Text, StyleSheet, SafeAreaView, Platform, ActivityIndicator, TouchableOpacity } from 'react-native';
 import { router } from 'expo-router';
-import { Ionicons } from '@expo/vector-icons';
 import { useAuthStore } from '@/stores/auth.store';
 import { useChatStore } from '@/stores/chat.store';
 import { useConversationsStore } from '@/stores/conversations.store';
-import { CHAT_CATEGORIES, type ChatCategory } from '@/data/chat-categories';
-import { colors, spacing, typography, radius, getShadow } from '@/theme';
-
-function buildCategorySubtitle(category: ChatCategory): string {
-  if (category.description.length <= 82) {
-    return category.description;
-  }
-
-  return `${category.description.slice(0, 82).trim()}...`;
-}
+import { useProfileStore } from '@/stores/profile.store';
+import { SubscriptionRequiredState } from '@/components/paywall';
+import {
+  EXPLORE_CATEGORIES,
+  type ExploreCategory,
+} from '@/data/explore-categories';
+import { ExploreGrid } from '@/components/explore';
+import { colors, spacing, typography } from '@/theme';
 
 export default function CategoriesScreen() {
   const chatStore = useChatStore();
   const { accessToken } = useAuthStore();
   const { createConversation } = useConversationsStore();
+  const { profile, fetchProfile, isLoading, error } = useProfileStore();
 
-  const categories = useMemo(
-    () =>
-      CHAT_CATEGORIES.map((category) => ({
-        ...category,
-        subtitle: buildCategorySubtitle(category),
-      })),
-    [],
-  );
+  useEffect(() => {
+    if (!profile && !isLoading) {
+      void fetchProfile();
+    }
+  }, [fetchProfile, isLoading, profile]);
 
   const prepareConversationState = useCallback(
     (nextConversationId: string) => {
@@ -57,7 +44,7 @@ export default function CategoriesScreen() {
   );
 
   const handleSelectCategory = useCallback(
-    async (category: ChatCategory) => {
+    async (category: ExploreCategory) => {
       try {
         const newConversation = await createConversation();
         prepareConversationState(newConversation.id);
@@ -74,60 +61,56 @@ export default function CategoriesScreen() {
     [createConversation, prepareConversationState, chatStore],
   );
 
+  if (isLoading && !profile) {
+    return (
+      <SafeAreaView style={styles.safeArea}>
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color={colors.primary} />
+        </View>
+      </SafeAreaView>
+    );
+  }
+
+  if (profile && !profile.access.hasChatAccess) {
+    return (
+      <SubscriptionRequiredState
+        title="As categorias premium abrem conversas guiadas"
+        description="Ative sua assinatura para usar prompts especializados como analisador de perfil, analisador de conversas e criador de jornada."
+        onPrimaryPress={() => router.push('/(app)/subscription')}
+        checkoutBlocked={
+          Platform.OS !== 'web' && profile.commerce.nativeCheckoutMode === 'blocked'
+        }
+      />
+    );
+  }
+
+  if (error && !profile) {
+    return (
+      <SafeAreaView style={styles.safeArea}>
+        <View style={styles.loadingContainer}>
+          <Text style={styles.errorTitle}>Não consegui carregar seu acesso</Text>
+          <Text style={styles.errorText}>{error}</Text>
+          <TouchableOpacity style={styles.retryButton} onPress={() => void fetchProfile()}>
+            <Text style={styles.retryButtonText}>Tentar novamente</Text>
+          </TouchableOpacity>
+        </View>
+      </SafeAreaView>
+    );
+  }
+
   return (
     <SafeAreaView style={styles.safeArea}>
-      <ScrollView
-        contentContainerStyle={styles.content}
-        showsVerticalScrollIndicator={false}
-      >
-        <View style={styles.hero}>
-          <Text style={styles.eyebrow}>Categorias</Text>
-          <Text style={styles.title}>Entradas prontas para começar melhor</Text>
-          <Text style={styles.subtitle}>
-            Escolha um modo de conversa e a Isabela já abre o chat com o contexto
-            certo, sem você precisar começar do zero.
-          </Text>
-        </View>
+      <View style={styles.header}>
+        <Text style={styles.title}>Explorar</Text>
+        <Text style={styles.subtitle}>
+          Escolha um tema e comece uma conversa guiada
+        </Text>
+      </View>
 
-        <View style={styles.list}>
-          {categories.map((category) => (
-            <TouchableOpacity
-              key={category.id}
-              style={styles.card}
-              activeOpacity={0.88}
-              onPress={() => handleSelectCategory(category)}
-            >
-              <View style={styles.cardHeader}>
-                <View style={styles.iconBadge}>
-                  <Ionicons
-                    name={category.icon}
-                    size={22}
-                    color={colors.primary}
-                  />
-                </View>
-                <View style={styles.cardCopy}>
-                  <Text style={styles.cardEyebrow}>{category.eyebrow}</Text>
-                  <Text style={styles.cardTitle}>{category.title}</Text>
-                </View>
-                <Ionicons
-                  name="arrow-forward-circle"
-                  size={24}
-                  color={colors.primary}
-                />
-              </View>
-
-              <Text style={styles.cardDescription}>{category.subtitle}</Text>
-
-              <View style={styles.promptPreview}>
-                <Text style={styles.promptPreviewLabel}>Prompt inicial</Text>
-                <Text style={styles.promptPreviewText} numberOfLines={3}>
-                  {category.prompt}
-                </Text>
-              </View>
-            </TouchableOpacity>
-          ))}
-        </View>
-      </ScrollView>
+      <ExploreGrid
+        categories={EXPLORE_CATEGORIES}
+        onSelectCategory={handleSelectCategory}
+      />
     </SafeAreaView>
   );
 }
@@ -137,100 +120,51 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: colors.background,
   },
-  content: {
+  loadingContainer: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: spacing.xl,
+  },
+  errorTitle: {
+    ...typography.h2,
+    color: colors.textPrimary,
+    textAlign: 'center',
+    marginBottom: spacing.sm,
+    fontFamily: 'Inter_700Bold',
+  },
+  errorText: {
+    ...typography.body,
+    color: colors.textSecondary,
+    textAlign: 'center',
+    fontFamily: 'Inter_400Regular',
+  },
+  retryButton: {
+    marginTop: spacing.lg,
+    backgroundColor: colors.primary,
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.sm + 2,
+    borderRadius: 999,
+  },
+  retryButtonText: {
+    ...typography.buttonSmall,
+    color: colors.white,
+    fontFamily: 'Inter_600SemiBold',
+  },
+  header: {
     paddingHorizontal: spacing.lg,
     paddingTop: Platform.OS === 'web' ? spacing.xl : spacing.md,
-    paddingBottom: spacing.xxl,
-  },
-  hero: {
-    marginBottom: spacing.lg,
-  },
-  eyebrow: {
-    ...typography.caption,
-    color: colors.primary,
-    textTransform: 'uppercase',
-    letterSpacing: 0.7,
-    fontFamily: 'Inter_700Bold',
-    marginBottom: spacing.xs,
+    paddingBottom: spacing.lg,
   },
   title: {
-    ...typography.h1,
+    ...typography.display,
     color: colors.textPrimary,
     fontFamily: 'Inter_700Bold',
-    marginBottom: spacing.sm,
-    maxWidth: 560,
+    marginBottom: spacing.xs,
   },
   subtitle: {
     ...typography.body,
     color: colors.textSecondary,
     fontFamily: 'Inter_400Regular',
-    maxWidth: 680,
-  },
-  list: {
-    gap: spacing.md,
-  },
-  card: {
-    backgroundColor: colors.white,
-    borderRadius: radius.xl,
-    padding: spacing.lg,
-    borderWidth: 1,
-    borderColor: colors.border,
-    ...getShadow('sm'),
-  },
-  cardHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: spacing.md,
-  },
-  iconBadge: {
-    width: 48,
-    height: 48,
-    borderRadius: radius.full,
-    backgroundColor: colors.primaryLight,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginRight: spacing.md,
-  },
-  cardCopy: {
-    flex: 1,
-  },
-  cardEyebrow: {
-    ...typography.caption,
-    color: colors.primary,
-    textTransform: 'uppercase',
-    letterSpacing: 0.5,
-    fontFamily: 'Inter_600SemiBold',
-    marginBottom: 2,
-  },
-  cardTitle: {
-    ...typography.h3,
-    color: colors.textPrimary,
-    fontFamily: 'Inter_700Bold',
-  },
-  cardDescription: {
-    ...typography.bodySmall,
-    color: colors.textSecondary,
-    fontFamily: 'Inter_400Regular',
-    marginBottom: spacing.md,
-  },
-  promptPreview: {
-    backgroundColor: colors.gray50,
-    borderRadius: radius.lg,
-    padding: spacing.md,
-    borderWidth: 1,
-    borderColor: colors.border,
-  },
-  promptPreviewLabel: {
-    ...typography.caption,
-    color: colors.textMuted,
-    textTransform: 'uppercase',
-    letterSpacing: 0.4,
-    fontFamily: 'Inter_600SemiBold',
-    marginBottom: spacing.xs,
-  },
-  promptPreviewText: {
-    ...typography.bodySmall,
-    color: colors.textPrimary,
-    fontFamily: 'Inter_500Medium',
   },
 });

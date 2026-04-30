@@ -2,6 +2,8 @@ import { ExpoConfig, ConfigContext } from 'expo/config';
 
 const IS_DEV = process.env.APP_VARIANT === 'development';
 const IS_PREVIEW = process.env.APP_VARIANT === 'preview';
+const EAS_PROJECT_ID =
+  process.env.EAS_PROJECT_ID || 'a7e13cfb-cc06-4cdf-b407-3ad100fd92a5';
 
 const getAppName = () => {
   if (IS_DEV) return 'Perpétuo (Dev)';
@@ -46,7 +48,7 @@ const getSentryPlugin = () => {
 export default ({ config }: ConfigContext): ExpoConfig => ({
   ...config,
   name: getAppName(),
-  slug: 'perpetuo',
+  slug: 'kosmos',
   version: '1.0.0',
   orientation: 'portrait',
   icon: './assets/icon.png',
@@ -106,15 +108,23 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
   },
   extra: {
     apiUrl: getApiUrl(),
-    eas: {
-      projectId: process.env.EAS_PROJECT_ID,
-    },
+    ...(EAS_PROJECT_ID
+      ? {
+          eas: {
+            projectId: EAS_PROJECT_ID,
+          },
+        }
+      : {}),
   },
-  updates: {
-    url: `https://u.expo.dev/${process.env.EAS_PROJECT_ID}`,
-  },
+  ...(EAS_PROJECT_ID
+    ? {
+        updates: {
+          url: `https://u.expo.dev/${EAS_PROJECT_ID}`,
+        },
+      }
+    : {}),
   runtimeVersion: {
     policy: 'appVersion',
   },
-  owner: process.env.EXPO_OWNER || 'perpetuo',
+  owner: process.env.EXPO_OWNER || 'kosmos-enkra',
 });

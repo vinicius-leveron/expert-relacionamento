@@ -9,15 +9,19 @@ import {
   SafeAreaView,
   Animated,
   Alert,
+  ActivityIndicator,
+  TouchableOpacity,
 } from 'react-native';
 import * as DocumentPicker from 'expo-document-picker';
 import * as ImagePicker from 'expo-image-picker';
 import * as FileSystem from 'expo-file-system';
 import { Audio } from 'expo-av';
+import { router } from 'expo-router';
 import { DrawerActions, useNavigation } from '@react-navigation/native';
 import { useChatStore, type Message } from '@/stores/chat.store';
 import { useAuthStore } from '@/stores/auth.store';
 import { useConversationsStore } from '@/stores/conversations.store';
+import { useProfileStore } from '@/stores/profile.store';
 import {
   AudioRecorderModal,
   AttachmentPickerModal,
@@ -28,6 +32,7 @@ import {
   TypingIndicator,
   type RecordedAudioDraft,
 } from '@/components/chat';
+import { SubscriptionRequiredState } from '@/components/paywall';
 import { colors, spacing, typography, getShadow, sizes } from '@/theme';
 
 const USE_NATIVE_DRIVER = Platform.OS !== 'web';
@@ -55,6 +60,12 @@ export default function ChatScreen() {
   } = useChatStore();
   const { accessToken } = useAuthStore();
   const { fetchConversations, activeId } = useConversationsStore();
+  const {
+    profile,
+    fetchProfile,
+    isLoading: isProfileLoading,
+    error: profileError,
+  } = useProfileStore();
   const recordingRef = useRef<Audio.Recording | null>(null);
   const recordingTickerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const audioDraftClearRef = useRef<(() => void) | null>(null);
@@ -74,6 +85,12 @@ export default function ChatScreen() {
   useEffect(() => {
     fetchConversations();
   }, [fetchConversations]);
+
+  useEffect(() => {
+    if (!profile && !isProfileLoading) {
+      void fetchProfile();
+    }
+  }, [fetchProfile, isProfileLoading, profile]);
 
   useEffect(() => {
     if (!activeId || activeId === conversationId) {
@@ -143,6 +160,43 @@ export default function ChatScreen() {
       useNativeDriver: USE_NATIVE_DRIVER,
     }).start();
   }, [fadeAnim]);
+
+  if (isProfileLoading && !profile) {
+    return (
+      <SafeAreaView style={styles.container}>
+        <View style={styles.centeredState}>
+          <ActivityIndicator size="large" color={colors.primary} />
+        </View>
+      </SafeAreaView>
+    );
+  }
+
+  if (profile && !profile.access.hasChatAccess) {
+    return (
+      <SubscriptionRequiredState
+        title="O chat faz parte do acesso premium"
+        description="Ative sua assinatura para conversar com a Isabela, usar categorias guiadas e liberar imagem, áudio e arquivos no chat."
+        onPrimaryPress={() => router.push('/(app)/subscription')}
+        checkoutBlocked={
+          Platform.OS !== 'web' && profile.commerce.nativeCheckoutMode === 'blocked'
+        }
+      />
+    );
+  }
+
+  if (profileError && !profile) {
+    return (
+      <SafeAreaView style={styles.container}>
+        <View style={styles.centeredState}>
+          <Text style={styles.retryTitle}>Não consegui carregar seu acesso</Text>
+          <Text style={styles.retryText}>{profileError}</Text>
+          <TouchableOpacity style={styles.retryButton} onPress={() => void fetchProfile()}>
+            <Text style={styles.retryButtonLabel}>Tentar novamente</Text>
+          </TouchableOpacity>
+        </View>
+      </SafeAreaView>
+    );
+  }
 
   const handleSend = async (text: string) => {
     try {
@@ -535,10 +589,10 @@ export default function ChatScreen() {
       <View style={styles.emptyAvatar}>
         <Text style={styles.emptyAvatarText}>I</Text>
       </View>
-      <Text style={styles.emptyTitle}>Oi, tudo bem?</Text>
+      <Text style={styles.emptyTitle}>Manda o print</Text>
       <Text style={styles.emptyText}>
-        Eu sou a Isabela, sua coach de relacionamentos. Me conta, como posso te
-        ajudar hoje?
+        Cola aqui a conversa que travou, o perfil que quer analisar ou a
+        situação que não sabe como resolver.
       </Text>
     </Animated.View>
   );
@@ -616,6 +670,12 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: colors.gray50,
   },
+  centeredState: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: spacing.xl,
+  },
   flatList: {
     flex: 1,
   },
@@ -658,5 +718,30 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     lineHeight: 24,
     fontFamily: 'Inter_400Regular',
+  },
+  retryTitle: {
+    ...typography.h2,
+    color: colors.textPrimary,
+    textAlign: 'center',
+    marginBottom: spacing.sm,
+    fontFamily: 'Inter_700Bold',
+  },
+  retryText: {
+    ...typography.body,
+    color: colors.textSecondary,
+    textAlign: 'center',
+    fontFamily: 'Inter_400Regular',
+  },
+  retryButton: {
+    marginTop: spacing.lg,
+    backgroundColor: colors.primary,
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.sm + 2,
+    borderRadius: 999,
+  },
+  retryButtonLabel: {
+    ...typography.buttonSmall,
+    color: colors.white,
+    fontFamily: 'Inter_600SemiBold',
   },
 });

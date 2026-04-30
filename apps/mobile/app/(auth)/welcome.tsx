@@ -20,20 +20,20 @@ const slides = [
   {
     id: '1',
     icon: 'heart-circle' as const,
-    title: 'Entenda seu padrão relacional',
-    description: 'Faça um diagnóstico curto para descobrir onde você se sabota e por onde começar.',
+    title: 'Para de afastar quem te interessa',
+    description: 'Descobre o padrão que você repete sem perceber e que sabota suas chances.',
   },
   {
     id: '2',
     icon: 'chatbubbles' as const,
-    title: 'Converse com a Isabela',
-    description: 'Receba direção prática para conversas, conflitos, reconquista e clareza emocional.',
+    title: 'Manda o print, recebe a análise',
+    description: 'A Isabela lê suas conversas e mostra onde você errou e como melhorar.',
   },
   {
     id: '3',
     icon: 'calendar' as const,
-    title: 'Ganhe um plano de evolução',
-    description: 'A jornada organiza o próximo passo certo para você, sem conselho genérico.',
+    title: 'Evolui de verdade',
+    description: '30 dias de direção clara pra você parar de ficar no mesmo lugar.',
   },
 ];
 

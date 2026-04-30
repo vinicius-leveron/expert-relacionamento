@@ -7,10 +7,10 @@ interface QuickRepliesProps {
 }
 
 const QUICK_REPLIES = [
-  'Estou com problemas no relacionamento',
-  'Quero entender meu perfil',
-  'Preciso de ajuda com uma conversa',
-  'Como funciona o app?',
+  'Analisa essa conversa pra mim',
+  'Onde eu tô errando no meu perfil?',
+  'Ela parou de responder, o que faço?',
+  'Quero melhorar minha comunicação',
 ];
 
 export function QuickReplies({ onSelect, visible = true }: QuickRepliesProps) {

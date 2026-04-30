@@ -32,7 +32,7 @@ export default function VerifyScreen() {
 
     verifyMagicLink(normalizedToken)
       .then(() => {
-        router.replace('/(app)/(tabs)/chat');
+        router.replace('/(app)');
       })
       .catch(() => {
         setError('Link inválido ou expirado. Solicite um novo.');

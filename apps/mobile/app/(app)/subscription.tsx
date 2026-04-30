@@ -7,6 +7,7 @@ import {
   ScrollView,
   TouchableOpacity,
   ActivityIndicator,
+  Platform,
 } from 'react-native';
 import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -17,19 +18,19 @@ import { captureAnalyticsEvent } from '@/analytics/posthog';
 
 const PREMIUM_BENEFITS = [
   {
-    icon: 'calendar-outline' as const,
-    title: 'Jornada guiada de 30 dias',
-    description: 'Desbloqueie o plano diário completo com progressão e continuidade.',
+    icon: 'images-outline' as const,
+    title: 'Análise de conversas e perfis',
+    description: 'Manda o print e descobre onde você tá errando e o que fazer diferente.',
   },
   {
-    icon: 'images-outline' as const,
-    title: 'Análise de imagens com IA',
-    description: 'Envie prints, fotos e contextos visuais para receber leitura assistida.',
+    icon: 'calendar-outline' as const,
+    title: '30 dias pra evoluir de verdade',
+    description: 'Um plano diário que te força a sair do mesmo lugar e parar de repetir erros.',
   },
   {
     icon: 'document-text-outline' as const,
-    title: 'Arquivos como contexto',
-    description: 'Anexe PDFs e documentos para a IA responder com base no seu material.',
+    title: 'Análise das suas redes',
+    description: 'Mostra seu perfil pra Isabela e recebe um feedback honesto do que mudar.',
   },
 ];
 
@@ -44,8 +45,12 @@ export default function SubscriptionScreen() {
   }, [fetchProfile]);
 
   const hasActiveSubscription = profile?.access.hasActiveSubscription === true;
+  const subscriptionStatus = profile?.subscription?.status ?? null;
   const checkoutUrl = profile?.commerce.checkoutUrl ?? null;
   const canUpgrade = profile?.commerce.canUpgrade === true;
+  const nativeCheckoutMode = profile?.commerce.nativeCheckoutMode ?? 'external_link';
+  const canOpenCheckoutInCurrentClient =
+    Platform.OS === 'web' || nativeCheckoutMode === 'external_link';
 
   useEffect(() => {
     if (hasTrackedView.current) {
@@ -59,17 +64,41 @@ export default function SubscriptionScreen() {
   const heading = useMemo(() => {
     if (hasActiveSubscription) {
       return {
-        title: 'Seu acesso premium está ativo',
-        subtitle: 'A jornada completa e os recursos avançados já estão liberados para você.',
+        title: 'Acesso liberado',
+        subtitle: 'Agora é usar. Manda os prints, analisa teu perfil e segue a jornada.',
+      };
+    }
+
+    if (subscriptionStatus === 'pending') {
+      return {
+        title: 'Processando pagamento',
+        subtitle:
+          'Assim que confirmar, seu acesso é liberado na hora.',
+      };
+    }
+
+    if (subscriptionStatus === 'payment_failed') {
+      return {
+        title: 'Pagamento falhou',
+        subtitle:
+          'Revisa a cobrança pra continuar usando tudo.',
+      };
+    }
+
+    if (subscriptionStatus === 'cancelled' || subscriptionStatus === 'expired') {
+      return {
+        title: 'Acesso expirou',
+        subtitle:
+          'Reativa pra voltar a analisar conversas e seguir a jornada.',
       };
     }
 
     return {
-      title: 'Desbloqueie a experiência completa',
+      title: 'Para de ficar no escuro',
       subtitle:
-        'Ative sua assinatura para continuar a jornada, analisar imagens e usar arquivos como contexto no chat.',
+        'Manda prints, analisa teu perfil e recebe direção de verdade.',
     };
-  }, [hasActiveSubscription]);
+  }, [hasActiveSubscription, subscriptionStatus]);
 
   const handleOpenCheckout = async () => {
     if (isOpeningCheckout) {
@@ -109,7 +138,13 @@ export default function SubscriptionScreen() {
         <View style={styles.headerRow}>
           <TouchableOpacity
             style={styles.backButton}
-            onPress={() => router.back()}
+            onPress={() => {
+              if (router.canGoBack()) {
+                router.back();
+              } else {
+                router.replace('/(app)/(tabs)/profile');
+              }
+            }}
             accessibilityRole="button"
             accessibilityLabel="Voltar"
           >
@@ -133,7 +168,7 @@ export default function SubscriptionScreen() {
         </View>
 
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>O que está incluído</Text>
+          <Text style={styles.sectionTitle}>O que você ganha</Text>
           {PREMIUM_BENEFITS.map((benefit) => (
             <View key={benefit.title} style={styles.benefitCard}>
               <View style={styles.benefitIcon}>
@@ -150,7 +185,9 @@ export default function SubscriptionScreen() {
         <View style={styles.infoCard}>
           <Ionicons name="shield-checkmark-outline" size={18} color={colors.infoDark} />
           <Text style={styles.infoText}>
-            Depois de concluir a compra, volte para este app e toque em atualizar status.
+            {canOpenCheckoutInCurrentClient
+              ? 'Depois de concluir a compra, volte para este app e toque em atualizar status.'
+              : 'A contratação está disponível no site oficial. Depois da compra, volte ao app e toque em atualizar status.'}
           </Text>
         </View>
       </ScrollView>
@@ -183,21 +220,23 @@ export default function SubscriptionScreen() {
           </>
         ) : (
           <>
-            <TouchableOpacity
-              style={[styles.primaryButton, !canUpgrade && styles.primaryButtonDisabled]}
-              onPress={handleOpenCheckout}
-              activeOpacity={0.85}
-              disabled={!canUpgrade || isOpeningCheckout}
-            >
-              {isOpeningCheckout ? (
-                <ActivityIndicator color={colors.white} />
-              ) : (
-                <>
-                  <Text style={styles.primaryButtonText}>Assinar agora</Text>
-                  <Ionicons name="open-outline" size={18} color={colors.white} />
-                </>
-              )}
-            </TouchableOpacity>
+            {canOpenCheckoutInCurrentClient ? (
+              <TouchableOpacity
+                style={[styles.primaryButton, !canUpgrade && styles.primaryButtonDisabled]}
+                onPress={handleOpenCheckout}
+                activeOpacity={0.85}
+                disabled={!canUpgrade || isOpeningCheckout}
+              >
+                {isOpeningCheckout ? (
+                  <ActivityIndicator color={colors.white} />
+                ) : (
+                  <>
+                    <Text style={styles.primaryButtonText}>Assinar agora</Text>
+                    <Ionicons name="open-outline" size={18} color={colors.white} />
+                  </>
+                )}
+              </TouchableOpacity>
+            ) : null}
             <TouchableOpacity
               style={styles.secondaryButton}
               onPress={handleRefreshStatus}

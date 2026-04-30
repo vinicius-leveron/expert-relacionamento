@@ -15,7 +15,7 @@ export default function Index() {
   }
 
   if (isAuthenticated) {
-    return <Redirect href="/(app)/(tabs)/chat" />;
+    return <Redirect href="/(app)" />;
   }
 
   return <Redirect href="/(auth)/welcome" />;

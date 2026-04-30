@@ -1,36 +1,44 @@
 import { useEffect } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import { useProfileStore } from '@/stores/profile.store';
 import { useAuthStore } from '@/stores/auth.store';
-import { ArchetypeCard, StatsGrid } from '@/components/profile';
-import { colors, spacing, typography, radius, getShadow, sizes } from '@/theme';
-import { openCheckoutUrl } from '@/utils/checkout';
+import {
+  ProfileHeader,
+  JourneyProgress,
+  StatsRow,
+  ArchetypeCard,
+  SubscriptionCard,
+} from '@/components/profile';
+import { colors, spacing, typography, radius, getShadow } from '@/theme';
 import { captureAnalyticsEvent } from '@/analytics/posthog';
 
 export default function ProfileScreen() {
-  const { profile, fetchProfile, isLoading } = useProfileStore();
-  const { logout, user } = useAuthStore();
+  const { profile, fetchProfile } = useProfileStore();
+  const { user } = useAuthStore();
 
   useEffect(() => {
     fetchProfile();
   }, [fetchProfile]);
 
-  const handleLogout = () => {
-    Alert.alert('Sair', 'Deseja realmente sair?', [
-      { text: 'Cancelar', style: 'cancel' },
-      {
-        text: 'Sair',
-        style: 'destructive',
-        onPress: logout,
-      },
-    ]);
+  const handleOpenSettings = () => {
+    captureAnalyticsEvent('profile_settings_clicked');
+    router.push('/(app)/settings');
+  };
+
+  const handleEditProfile = () => {
+    captureAnalyticsEvent('profile_edit_clicked');
+    router.push('/(app)/edit-profile');
   };
 
   const handleStartDiagnostic = () => {
-    // Diagnóstico agora é via chat - redireciona para o chat onde a Isabela conduz
-    router.push('/(app)/(tabs)/chat');
+    if (profile?.access.hasChatAccess) {
+      router.push('/(app)/(tabs)/chat');
+      return;
+    }
+
+    router.push('/(app)/subscription');
   };
 
   const handleOpenSubscription = () => {
@@ -40,44 +48,83 @@ export default function ProfileScreen() {
     router.push('/(app)/subscription');
   };
 
-  const handleOpenCheckout = () => {
-    captureAnalyticsEvent('profile_checkout_clicked', {
-      has_active_subscription: profile?.access.hasActiveSubscription === true,
-    });
-    void openCheckoutUrl(profile?.commerce.checkoutUrl);
+  const handleOpenArchetype = () => {
+    if (profile?.diagnostic) {
+      router.push({
+        pathname: '/(app)/archetype',
+        params: { archetype: profile.diagnostic.archetype },
+      });
+    }
   };
 
-  const handleOpenHelp = () => {
-    captureAnalyticsEvent('profile_help_clicked');
-    router.push('/(app)/help');
-  };
-
-  // Mock stats - TODO: Get from profile
   const stats = [
-    { icon: 'calendar' as const, value: 1, label: 'Dias ativos', color: colors.primary },
-    { icon: 'chatbubbles' as const, value: 12, label: 'Mensagens', color: colors.info },
-    { icon: 'flame' as const, value: 1, label: 'Streak atual', color: colors.warning },
-    { icon: 'trophy' as const, value: 0, label: 'Conquistas', color: colors.success },
+    {
+      icon: 'diamond' as const,
+      value: profile?.access.hasActiveSubscription
+        ? 'Ativa'
+        : profile?.subscription?.status === 'payment_failed'
+          ? 'Falhou'
+          : profile?.subscription
+            ? 'Pendente'
+            : 'Inativa',
+      label: 'Assinatura',
+      color: profile?.access.hasActiveSubscription ? colors.success : colors.warning,
+    },
+    {
+      icon: 'sparkles' as const,
+      value: profile?.diagnostic ? 'Pronto' : 'Pendente',
+      label: 'Diagnóstico',
+      color: profile?.diagnostic ? colors.primary : colors.textMuted,
+    },
+    {
+      icon: 'chatbubbles' as const,
+      value: profile?.access.hasChatAccess ? 'Liberado' : 'Bloq.',
+      label: 'Chat',
+      color: profile?.access.hasChatAccess ? colors.info : colors.textMuted,
+    },
+    {
+      icon: 'images' as const,
+      value: profile?.access.canAnalyzeImages ? 'Liberado' : 'Bloq.',
+      label: 'Imagens',
+      color: profile?.access.canAnalyzeImages ? colors.success : colors.textMuted,
+    },
   ];
+
+  // Calculate journey progress (mock for now)
+  const journeyProgress = profile?.diagnostic ? 72 : 25;
 
   return (
     <ScrollView style={styles.container} showsVerticalScrollIndicator={false}>
-      {/* Header */}
-      <View style={styles.header}>
-        <View style={styles.avatar} accessibilityLabel="Foto de perfil">
-          <Ionicons name="person" size={40} color={colors.primary} />
-        </View>
-        <Text style={styles.email}>{user?.email || 'Carregando...'}</Text>
-        {user?.phone && <Text style={styles.phone}>{user.phone}</Text>}
-      </View>
+      {/* Profile Header */}
+      <ProfileHeader
+        name={profile?.displayName ?? user?.email?.split('@')[0]}
+        email={user?.email ?? undefined}
+        archetype={profile?.diagnostic?.archetype}
+        avatarUrl={profile?.avatarUrl}
+        onEditPress={handleEditProfile}
+        onSettingsPress={handleOpenSettings}
+      />
 
-      {/* Stats */}
+      {/* Journey Progress */}
       <View style={styles.section}>
-        <Text style={styles.sectionTitle}>Estatísticas</Text>
-        <StatsGrid stats={stats} />
+        <JourneyProgress
+          progress={journeyProgress}
+          subtitle={
+            profile?.diagnostic
+              ? 'Continua mandando prints e seguindo a jornada'
+              : profile?.access.hasChatAccess
+                ? 'Faz o diagnóstico pra descobrir onde você trava'
+                : 'Ativa o acesso pra começar'
+          }
+        />
       </View>
 
-      {/* Archetype */}
+      {/* Stats Row - Horizontal Scroll */}
+      <View style={styles.statsSection}>
+        <StatsRow stats={stats} />
+      </View>
+
+      {/* Archetype Section */}
       <View style={styles.section}>
         <Text style={styles.sectionTitle}>Seu Arquétipo</Text>
         {profile?.diagnostic ? (
@@ -96,128 +143,31 @@ export default function ProfileScreen() {
             <View style={styles.emptyIconContainer}>
               <Ionicons name="chatbubble-ellipses" size={32} color={colors.primary} />
             </View>
-            <Text style={styles.emptyTitle}>Descubra seu arquétipo</Text>
+            <Text style={styles.emptyTitle}>Descobre onde você erra</Text>
             <Text style={styles.emptyText}>
-              Converse com a Isabela para descobrir seus padrões de relacionamento.
+              {profile?.access.hasChatAccess
+                ? 'Responde umas perguntas e a Isabela mostra o padrão que te sabota.'
+                : 'Ativa o acesso pra fazer o diagnóstico.'}
             </Text>
             <View style={styles.emptyButton}>
-              <Text style={styles.emptyButtonText}>Conversar com Isabela</Text>
+              <Text style={styles.emptyButtonText}>
+                {profile?.access.hasChatAccess ? 'Conversar com Isabela' : 'Ver assinatura'}
+              </Text>
               <Ionicons name="arrow-forward" size={16} color={colors.white} />
             </View>
           </TouchableOpacity>
         )}
       </View>
 
-      {/* Subscription */}
+      {/* Subscription Section */}
       <View style={styles.section}>
         <Text style={styles.sectionTitle}>Assinatura</Text>
-        <View style={styles.card}>
-          {profile?.access.hasActiveSubscription ? (
-            <>
-              <View style={styles.cardRow}>
-                <Text style={styles.cardLabel}>Status</Text>
-                <View style={styles.statusBadge}>
-                  <Ionicons name="checkmark-circle" size={14} color={colors.successDark} />
-                  <Text style={styles.statusText}>Ativa</Text>
-                </View>
-              </View>
-              <View style={styles.cardRow}>
-                <Text style={styles.cardLabel}>Plano</Text>
-                <Text style={styles.cardValue}>{profile?.subscription?.planId ?? 'Premium'}</Text>
-              </View>
-              <TouchableOpacity
-                style={styles.manageButton}
-                onPress={handleOpenSubscription}
-                activeOpacity={0.8}
-                accessibilityLabel="Ver detalhes da assinatura"
-                accessibilityRole="button"
-              >
-                <Text style={styles.manageButtonText}>Ver detalhes do plano</Text>
-                <Ionicons name="arrow-forward" size={16} color={colors.primaryDark} />
-              </TouchableOpacity>
-            </>
-          ) : (
-            <>
-              <View style={styles.subscriptionEmpty}>
-                <Ionicons name="diamond-outline" size={24} color={colors.textMuted} />
-                <Text style={styles.cardEmpty}>Você não possui uma assinatura ativa.</Text>
-              </View>
-              <Text style={styles.subscriptionHint}>
-                Desbloqueie a jornada completa, análise de imagens e arquivos no chat.
-              </Text>
-              <View style={styles.subscriptionActions}>
-                <TouchableOpacity
-                  style={styles.subscribeButton}
-                  onPress={handleOpenSubscription}
-                  activeOpacity={0.8}
-                  accessibilityLabel="Abrir assinatura"
-                  accessibilityRole="button"
-                >
-                  <Text style={styles.subscribeButtonText}>Conhecer plano</Text>
-                  <Ionicons name="arrow-forward" size={16} color={colors.white} />
-                </TouchableOpacity>
-                {profile?.commerce.canUpgrade ? (
-                  <TouchableOpacity
-                    style={styles.checkoutButton}
-                    onPress={handleOpenCheckout}
-                    activeOpacity={0.8}
-                    accessibilityLabel="Ir para checkout"
-                    accessibilityRole="button"
-                  >
-                    <Text style={styles.checkoutButtonText}>Ir para checkout</Text>
-                  </TouchableOpacity>
-                ) : null}
-              </View>
-            </>
-          )}
-        </View>
-      </View>
-
-      {/* Settings */}
-      <View style={styles.section}>
-        <Text style={styles.sectionTitle}>Conta</Text>
-        <View style={styles.settingsCard}>
-          <TouchableOpacity
-            style={styles.settingsItem}
-            accessibilityLabel="Configurações de notificações"
-            accessibilityRole="button"
-          >
-            <View style={styles.settingsItemLeft}>
-              <Ionicons name="notifications-outline" size={20} color={colors.textPrimary} />
-              <Text style={styles.settingsItemText}>Notificações</Text>
-            </View>
-            <Ionicons name="chevron-forward" size={20} color={colors.textMuted} />
-          </TouchableOpacity>
-
-          <View style={styles.settingsDivider} />
-
-          <TouchableOpacity
-            style={styles.settingsItem}
-            onPress={handleOpenHelp}
-            accessibilityLabel="Ajuda e suporte"
-            accessibilityRole="button"
-          >
-            <View style={styles.settingsItemLeft}>
-              <Ionicons name="help-circle-outline" size={20} color={colors.textPrimary} />
-              <Text style={styles.settingsItemText}>Ajuda</Text>
-            </View>
-            <Ionicons name="chevron-forward" size={20} color={colors.textMuted} />
-          </TouchableOpacity>
-
-          <View style={styles.settingsDivider} />
-
-          <TouchableOpacity
-            style={styles.settingsItem}
-            onPress={handleLogout}
-            accessibilityLabel="Sair da conta"
-            accessibilityRole="button"
-          >
-            <View style={styles.settingsItemLeft}>
-              <Ionicons name="log-out-outline" size={20} color={colors.error} />
-              <Text style={[styles.settingsItemText, { color: colors.error }]}>Sair</Text>
-            </View>
-          </TouchableOpacity>
-        </View>
+        <SubscriptionCard
+          isActive={profile?.access.hasActiveSubscription}
+          planName={profile?.subscription?.planId ?? 'Premium'}
+          onSubscribePress={handleOpenSubscription}
+          onManagePress={handleOpenSubscription}
+        />
       </View>
 
       {/* Version */}
@@ -231,36 +181,12 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: colors.gray50,
   },
-  header: {
-    alignItems: 'center',
-    padding: spacing.lg,
-    paddingTop: spacing.xl,
-    backgroundColor: colors.white,
-  },
-  avatar: {
-    width: sizes.avatarXl,
-    height: sizes.avatarXl,
-    borderRadius: sizes.avatarXl / 2,
-    backgroundColor: colors.primaryLight,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginBottom: spacing.md,
-    ...getShadow('sm'),
-  },
-  email: {
-    ...typography.h3,
-    color: colors.textPrimary,
-    fontFamily: 'Inter_600SemiBold',
-  },
-  phone: {
-    ...typography.bodySmall,
-    color: colors.textSecondary,
-    marginTop: spacing.xs,
-    fontFamily: 'Inter_400Regular',
-  },
   section: {
-    padding: spacing.md,
-    paddingBottom: 0,
+    paddingHorizontal: spacing.md,
+    paddingTop: spacing.md,
+  },
+  statsSection: {
+    paddingTop: spacing.md,
   },
   sectionTitle: {
     ...typography.caption,
@@ -269,104 +195,6 @@ const styles = StyleSheet.create({
     letterSpacing: 0.5,
     marginBottom: spacing.sm,
     marginLeft: spacing.xs,
-    fontFamily: 'Inter_600SemiBold',
-  },
-  card: {
-    backgroundColor: colors.white,
-    borderRadius: radius.lg,
-    padding: spacing.md,
-    ...getShadow('sm'),
-  },
-  cardRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingVertical: spacing.sm,
-  },
-  cardLabel: {
-    ...typography.body,
-    color: colors.textSecondary,
-    fontFamily: 'Inter_400Regular',
-  },
-  cardValue: {
-    ...typography.body,
-    color: colors.textPrimary,
-    fontFamily: 'Inter_500Medium',
-  },
-  cardEmpty: {
-    ...typography.bodySmall,
-    color: colors.textMuted,
-    fontFamily: 'Inter_400Regular',
-  },
-  subscriptionHint: {
-    ...typography.bodySmall,
-    color: colors.textSecondary,
-    marginTop: spacing.sm,
-    lineHeight: 20,
-    fontFamily: 'Inter_400Regular',
-  },
-  subscriptionActions: {
-    gap: spacing.sm,
-    marginTop: spacing.md,
-  },
-  subscribeButton: {
-    height: 48,
-    borderRadius: radius.md,
-    backgroundColor: colors.primary,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: spacing.sm,
-  },
-  subscribeButtonText: {
-    ...typography.body,
-    color: colors.white,
-    fontFamily: 'Inter_600SemiBold',
-  },
-  checkoutButton: {
-    height: 44,
-    borderRadius: radius.md,
-    borderWidth: 1,
-    borderColor: colors.primary,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: colors.white,
-  },
-  checkoutButtonText: {
-    ...typography.bodySmall,
-    color: colors.primaryDark,
-    fontFamily: 'Inter_600SemiBold',
-  },
-  subscriptionEmpty: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.sm,
-    paddingVertical: spacing.sm,
-  },
-  statusBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: colors.successLight,
-    paddingHorizontal: spacing.sm,
-    paddingVertical: spacing.xs,
-    borderRadius: radius.full,
-    gap: spacing.xs,
-  },
-  statusText: {
-    ...typography.caption,
-    color: colors.successDark,
-    fontFamily: 'Inter_500Medium',
-  },
-  manageButton: {
-    marginTop: spacing.md,
-    alignSelf: 'flex-start',
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.xs,
-  },
-  manageButtonText: {
-    ...typography.bodySmall,
-    color: colors.primaryDark,
     fontFamily: 'Inter_600SemiBold',
   },
   emptyCard: {
@@ -411,32 +239,6 @@ const styles = StyleSheet.create({
     ...typography.buttonSmall,
     color: colors.white,
     fontFamily: 'Inter_600SemiBold',
-  },
-  settingsCard: {
-    backgroundColor: colors.white,
-    borderRadius: radius.lg,
-    ...getShadow('sm'),
-  },
-  settingsItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    padding: spacing.md,
-  },
-  settingsItemLeft: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.sm,
-  },
-  settingsItemText: {
-    ...typography.body,
-    color: colors.textPrimary,
-    fontFamily: 'Inter_500Medium',
-  },
-  settingsDivider: {
-    height: 1,
-    backgroundColor: colors.border,
-    marginHorizontal: spacing.md,
   },
   version: {
     ...typography.caption,

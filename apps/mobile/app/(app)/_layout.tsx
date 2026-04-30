@@ -38,6 +38,12 @@ export default function AppLayout() {
         }}
       >
         <Drawer.Screen
+          name="index"
+          options={{
+            drawerItemStyle: { display: 'none' },
+          }}
+        />
+        <Drawer.Screen
           name="(tabs)"
           options={{
             drawerLabel: 'Home',
@@ -69,6 +75,18 @@ export default function AppLayout() {
         />
         <Drawer.Screen
           name="help"
+          options={{
+            drawerItemStyle: { display: 'none' },
+          }}
+        />
+        <Drawer.Screen
+          name="settings"
+          options={{
+            drawerItemStyle: { display: 'none' },
+          }}
+        />
+        <Drawer.Screen
+          name="edit-profile"
           options={{
             drawerItemStyle: { display: 'none' },
           }}

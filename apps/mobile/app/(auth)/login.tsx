@@ -55,12 +55,12 @@ export default function LoginScreen() {
         const token = url.searchParams.get('token');
         if (token) {
           await verifyMagicLink(token);
-          router.replace('/(app)/(tabs)/chat');
+          router.replace('/(app)');
         }
       }
     } catch (err) {
       captureAnalyticsEvent('auth_magic_link_request_failed');
-      setError('Falha ao enviar link. Tente novamente.');
+      setError(err instanceof Error ? err.message : 'Falha ao enviar link. Tente novamente.');
     } finally {
       setIsSubmitting(false);
     }
@@ -73,9 +73,9 @@ export default function LoginScreen() {
           <View style={styles.successIcon}>
             <Ionicons name="mail" size={40} color={colors.primary} />
           </View>
-          <Text style={styles.title}>Verifique seu email</Text>
+          <Text style={styles.title}>Quase lá</Text>
           <Text style={styles.subtitle}>
-            Enviamos um link de acesso para{'\n'}
+            Enviamos seu acesso para{'\n'}
             <Text style={styles.emailHighlight}>{email}</Text>
           </Text>
           <TouchableOpacity
@@ -104,9 +104,9 @@ export default function LoginScreen() {
             <Text style={styles.avatarText}>I</Text>
           </View>
 
-          <Text style={styles.title}>Oi! Vamos começar?</Text>
+          <Text style={styles.title}>Para de repetir os mesmos erros</Text>
           <Text style={styles.subtitle}>
-            Digite seu email para acessar sua conta ou criar uma nova
+            Entra e descobre onde você tá falhando nas conversas e nos relacionamentos
           </Text>
 
           <View style={styles.inputContainer}>
@@ -162,7 +162,7 @@ export default function LoginScreen() {
                 <Ionicons name="people" size={16} color={colors.primary} />
               </View>
               <Text style={styles.socialProofText}>
-                12.000+ homens já transformaram seus relacionamentos
+                Acesso seguro por link no email, sem senha para memorizar.
               </Text>
             </View>
           </View>
