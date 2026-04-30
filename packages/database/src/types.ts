@@ -179,6 +179,217 @@ export type Database = {
           },
         ]
       }
+      chat_attachments: {
+        Row: {
+          id: string
+          user_id: string
+          conversation_id: string
+          scope: string
+          file_name: string
+          mime_type: string
+          size_bytes: number
+          storage_path: string
+          sha256: string | null
+          status: string
+          error_message: string | null
+          page_count: number | null
+          metadata: Json
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          user_id: string
+          conversation_id: string
+          scope?: string
+          file_name: string
+          mime_type: string
+          size_bytes: number
+          storage_path: string
+          sha256?: string | null
+          status?: string
+          error_message?: string | null
+          page_count?: number | null
+          metadata?: Json
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          user_id?: string
+          conversation_id?: string
+          scope?: string
+          file_name?: string
+          mime_type?: string
+          size_bytes?: number
+          storage_path?: string
+          sha256?: string | null
+          status?: string
+          error_message?: string | null
+          page_count?: number | null
+          metadata?: Json
+          created_at?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: 'chat_attachments_conversation_id_fkey'
+            columns: ['conversation_id']
+            referencedRelation: 'conversations'
+            referencedColumns: ['id']
+          },
+          {
+            foreignKeyName: 'chat_attachments_user_id_fkey'
+            columns: ['user_id']
+            referencedRelation: 'users'
+            referencedColumns: ['id']
+          },
+        ]
+      }
+      message_attachments: {
+        Row: {
+          id: string
+          message_id: string
+          attachment_id: string
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          message_id: string
+          attachment_id: string
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          message_id?: string
+          attachment_id?: string
+          created_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: 'message_attachments_attachment_id_fkey'
+            columns: ['attachment_id']
+            referencedRelation: 'chat_attachments'
+            referencedColumns: ['id']
+          },
+          {
+            foreignKeyName: 'message_attachments_message_id_fkey'
+            columns: ['message_id']
+            referencedRelation: 'messages'
+            referencedColumns: ['id']
+          },
+        ]
+      }
+      chat_attachment_chunks: {
+        Row: {
+          id: string
+          attachment_id: string
+          user_id: string
+          conversation_id: string
+          content: string
+          embedding: number[] | null
+          chunk_index: number
+          token_count: number | null
+          metadata: Json
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          attachment_id: string
+          user_id: string
+          conversation_id: string
+          content: string
+          embedding?: number[] | null
+          chunk_index: number
+          token_count?: number | null
+          metadata?: Json
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          attachment_id?: string
+          user_id?: string
+          conversation_id?: string
+          content?: string
+          embedding?: number[] | null
+          chunk_index?: number
+          token_count?: number | null
+          metadata?: Json
+          created_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: 'chat_attachment_chunks_attachment_id_fkey'
+            columns: ['attachment_id']
+            referencedRelation: 'chat_attachments'
+            referencedColumns: ['id']
+          },
+          {
+            foreignKeyName: 'chat_attachment_chunks_conversation_id_fkey'
+            columns: ['conversation_id']
+            referencedRelation: 'conversations'
+            referencedColumns: ['id']
+          },
+          {
+            foreignKeyName: 'chat_attachment_chunks_user_id_fkey'
+            columns: ['user_id']
+            referencedRelation: 'users'
+            referencedColumns: ['id']
+          },
+        ]
+      }
+      chat_attachment_jobs: {
+        Row: {
+          id: string
+          attachment_id: string
+          job_type: string
+          status: string
+          attempt_count: number
+          scheduled_at: string
+          started_at: string | null
+          finished_at: string | null
+          last_error: string | null
+          metadata: Json
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          attachment_id: string
+          job_type?: string
+          status?: string
+          attempt_count?: number
+          scheduled_at?: string
+          started_at?: string | null
+          finished_at?: string | null
+          last_error?: string | null
+          metadata?: Json
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          attachment_id?: string
+          job_type?: string
+          status?: string
+          attempt_count?: number
+          scheduled_at?: string
+          started_at?: string | null
+          finished_at?: string | null
+          last_error?: string | null
+          metadata?: Json
+          created_at?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: 'chat_attachment_jobs_attachment_id_fkey'
+            columns: ['attachment_id']
+            referencedRelation: 'chat_attachments'
+            referencedColumns: ['id']
+          },
+        ]
+      }
       diagnostics: {
         Row: {
           id: string
@@ -220,6 +431,8 @@ export type Database = {
           current_day: number
           started_at: string
           last_interaction_at: string
+          last_nurturing_sent_at: string | null
+          last_reengagement_sent_at: string | null
           status: string
         }
         Insert: {
@@ -228,6 +441,8 @@ export type Database = {
           current_day?: number
           started_at?: string
           last_interaction_at?: string
+          last_nurturing_sent_at?: string | null
+          last_reengagement_sent_at?: string | null
           status?: string
         }
         Update: {
@@ -236,6 +451,8 @@ export type Database = {
           current_day?: number
           started_at?: string
           last_interaction_at?: string
+          last_nurturing_sent_at?: string | null
+          last_reengagement_sent_at?: string | null
           status?: string
         }
         Relationships: [
@@ -296,6 +513,107 @@ export type Database = {
           },
         ]
       }
+      sessions: {
+        Row: {
+          id: string
+          user_id: string
+          refresh_token_hash: string
+          device_info: Json
+          expires_at: string
+          created_at: string
+          revoked_at: string | null
+        }
+        Insert: {
+          id?: string
+          user_id: string
+          refresh_token_hash: string
+          device_info?: Json
+          expires_at: string
+          created_at?: string
+          revoked_at?: string | null
+        }
+        Update: {
+          id?: string
+          user_id?: string
+          refresh_token_hash?: string
+          device_info?: Json
+          expires_at?: string
+          created_at?: string
+          revoked_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: 'sessions_user_id_fkey'
+            columns: ['user_id']
+            referencedRelation: 'users'
+            referencedColumns: ['id']
+          },
+        ]
+      }
+      magic_links: {
+        Row: {
+          id: string
+          email: string
+          token_hash: string
+          expires_at: string
+          used_at: string | null
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          email: string
+          token_hash: string
+          expires_at: string
+          used_at?: string | null
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          email?: string
+          token_hash?: string
+          expires_at?: string
+          used_at?: string | null
+          created_at?: string
+        }
+        Relationships: []
+      }
+      verification_codes: {
+        Row: {
+          id: string
+          user_id: string
+          code: string
+          purpose: string
+          expires_at: string
+          used_at: string | null
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          user_id: string
+          code: string
+          purpose?: string
+          expires_at: string
+          used_at?: string | null
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          user_id?: string
+          code?: string
+          purpose?: string
+          expires_at?: string
+          used_at?: string | null
+          created_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: 'verification_codes_user_id_fkey'
+            columns: ['user_id']
+            referencedRelation: 'users'
+            referencedColumns: ['id']
+          },
+        ]
+      }
     }
     Views: {
       [_ in never]: never
@@ -310,6 +628,24 @@ export type Database = {
         Returns: {
           id: string
           document_id: string
+          content: string
+          similarity: number
+          metadata: Json
+        }[]
+      }
+      search_chat_attachment_chunks: {
+        Args: {
+          query_embedding: number[]
+          filter_user_id: string
+          filter_conversation_id: string
+          filter_attachment_ids?: string[] | null
+          match_threshold: number
+          match_count: number
+        }
+        Returns: {
+          id: string
+          attachment_id: string
+          file_name: string
           content: string
           similarity: number
           metadata: Json
@@ -354,8 +690,15 @@ export type Tables<
 export type UserRow = Database['public']['Tables']['users']['Row']
 export type ConversationRow = Database['public']['Tables']['conversations']['Row']
 export type MessageRow = Database['public']['Tables']['messages']['Row']
+export type ChatAttachmentRow = Database['public']['Tables']['chat_attachments']['Row']
+export type MessageAttachmentRow = Database['public']['Tables']['message_attachments']['Row']
+export type ChatAttachmentChunkRow = Database['public']['Tables']['chat_attachment_chunks']['Row']
+export type ChatAttachmentJobRow = Database['public']['Tables']['chat_attachment_jobs']['Row']
 export type DiagnosticRow = Database['public']['Tables']['diagnostics']['Row']
 export type JourneyProgressRow = Database['public']['Tables']['journey_progress']['Row']
 export type SubscriptionRow = Database['public']['Tables']['subscriptions']['Row']
 export type KnowledgeDocumentRow = Database['public']['Tables']['knowledge_documents']['Row']
 export type KnowledgeChunkRow = Database['public']['Tables']['knowledge_chunks']['Row']
+export type SessionRow = Database['public']['Tables']['sessions']['Row']
+export type MagicLinkRow = Database['public']['Tables']['magic_links']['Row']
+export type VerificationCodeRow = Database['public']['Tables']['verification_codes']['Row']

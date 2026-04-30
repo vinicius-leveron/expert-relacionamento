@@ -14,6 +14,8 @@ describe('IdentityResolver', () => {
       findByEmail: vi.fn(),
       save: vi.fn(),
       findOrCreateByPhone: vi.fn(),
+      findOrCreateByEmail: vi.fn(),
+      linkPhone: vi.fn(),
     }
     resolver = new IdentityResolver(mockUserRepo)
   })
@@ -34,32 +36,43 @@ describe('IdentityResolver', () => {
   })
 
   describe('resolve with email', () => {
-    it('should return existing user if found by email', async () => {
+    it('should delegate to findOrCreateByEmail', async () => {
       const existingUser = User.create({ email: 'test@example.com' })
-      vi.mocked(mockUserRepo.findByEmail).mockResolvedValue(existingUser)
+      vi.mocked(mockUserRepo.findOrCreateByEmail).mockResolvedValue(existingUser)
 
       const result = await resolver.resolve({
         type: 'email',
         value: 'test@example.com',
       })
 
-      expect(mockUserRepo.findByEmail).toHaveBeenCalledWith('test@example.com')
+      expect(mockUserRepo.findOrCreateByEmail).toHaveBeenCalledWith('test@example.com')
       expect(result.id).toBe(existingUser.id)
-      expect(mockUserRepo.save).not.toHaveBeenCalled()
     })
+  })
 
-    it('should create new user if not found by email', async () => {
-      vi.mocked(mockUserRepo.findByEmail).mockResolvedValue(null)
-      vi.mocked(mockUserRepo.save).mockResolvedValue()
+  describe('resolve with user_id', () => {
+    it('should find user by id', async () => {
+      const existingUser = User.create({ email: 'test@example.com' })
+      vi.mocked(mockUserRepo.findById).mockResolvedValue(existingUser)
 
       const result = await resolver.resolve({
-        type: 'email',
-        value: 'new@example.com',
+        type: 'user_id',
+        value: existingUser.id,
       })
 
-      expect(mockUserRepo.findByEmail).toHaveBeenCalledWith('new@example.com')
-      expect(mockUserRepo.save).toHaveBeenCalled()
-      expect(result.email).toBe('new@example.com')
+      expect(mockUserRepo.findById).toHaveBeenCalledWith(existingUser.id)
+      expect(result.id).toBe(existingUser.id)
+    })
+
+    it('should throw if user not found', async () => {
+      vi.mocked(mockUserRepo.findById).mockResolvedValue(null)
+
+      await expect(
+        resolver.resolve({
+          type: 'user_id',
+          value: 'non-existent-id',
+        }),
+      ).rejects.toThrow('User not found')
     })
   })
 })

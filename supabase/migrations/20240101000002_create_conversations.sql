@@ -3,7 +3,7 @@
 
 -- Conversations table
 CREATE TABLE IF NOT EXISTS public.conversations (
-  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   user_id UUID NOT NULL REFERENCES public.users(id) ON DELETE CASCADE,
   channel VARCHAR(20) NOT NULL DEFAULT 'whatsapp', -- 'whatsapp', 'web', 'app'
   status VARCHAR(20) NOT NULL DEFAULT 'active', -- 'active', 'archived'
@@ -14,7 +14,7 @@ CREATE TABLE IF NOT EXISTS public.conversations (
 
 -- Messages table
 CREATE TABLE IF NOT EXISTS public.messages (
-  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   conversation_id UUID NOT NULL REFERENCES public.conversations(id) ON DELETE CASCADE,
   role VARCHAR(20) NOT NULL, -- 'user', 'assistant'
   content TEXT NOT NULL,
@@ -25,7 +25,7 @@ CREATE TABLE IF NOT EXISTS public.messages (
 
 -- Diagnostics table (stores archetype diagnosis results)
 CREATE TABLE IF NOT EXISTS public.diagnostics (
-  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   user_id UUID NOT NULL REFERENCES public.users(id) ON DELETE CASCADE,
   archetype VARCHAR(50) NOT NULL, -- 'provedor', 'aventureiro', 'romantico', 'racional'
   scores JSONB NOT NULL DEFAULT '{}', -- Score per archetype for transparency
@@ -38,7 +38,7 @@ CREATE TABLE IF NOT EXISTS public.diagnostics (
 
 -- User journey tracking
 CREATE TABLE IF NOT EXISTS public.journey_progress (
-  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   user_id UUID NOT NULL REFERENCES public.users(id) ON DELETE CASCADE,
   current_day INT NOT NULL DEFAULT 1, -- Day in 30-day journey
   started_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
@@ -50,7 +50,7 @@ CREATE TABLE IF NOT EXISTS public.journey_progress (
 
 -- Subscriptions table
 CREATE TABLE IF NOT EXISTS public.subscriptions (
-  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   user_id UUID NOT NULL REFERENCES public.users(id) ON DELETE CASCADE,
   external_id VARCHAR(255) NOT NULL, -- ID in payment gateway
   gateway VARCHAR(50) NOT NULL, -- 'hotmart', 'kiwify', 'stripe'

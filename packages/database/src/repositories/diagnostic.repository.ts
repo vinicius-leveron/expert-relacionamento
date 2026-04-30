@@ -18,6 +18,8 @@ export interface JourneyProgress {
   currentDay: number
   startedAt: Date
   lastInteractionAt: Date
+  lastNurturingSentAt: Date | null
+  lastReengagementSentAt: Date | null
   status: 'active' | 'paused' | 'completed' | 'churned'
 }
 
@@ -48,7 +50,7 @@ export interface DiagnosticRepository {
   startJourney(userId: string): Promise<JourneyProgress>
 
   /**
-   * Atualiza progresso (incrementa dia, atualiza última interação)
+   * Atualiza progresso da jornada sem tocar na última interação do usuário
    */
   updateJourneyProgress(
     userId: string,
@@ -56,9 +58,27 @@ export interface DiagnosticRepository {
   ): Promise<void>
 
   /**
+   * Lista jornadas para processamento assíncrono
+   */
+  listJourneyProgress(params?: {
+    statuses?: JourneyProgress['status'][]
+    limit?: number
+  }): Promise<JourneyProgress[]>
+
+  /**
    * Registra interação (atualiza lastInteractionAt)
    */
   recordInteraction(userId: string): Promise<void>
+
+  /**
+   * Marca o último nurturing enviado pelo worker
+   */
+  markNurturingSent(userId: string, sentAt?: Date): Promise<void>
+
+  /**
+   * Marca o último reengajamento enviado pelo worker
+   */
+  markReengagementSent(userId: string, sentAt?: Date): Promise<void>
 }
 
 /**
@@ -154,12 +174,9 @@ export class SupabaseDiagnosticRepository implements DiagnosticRepository {
     updates: Partial<Pick<JourneyProgress, 'currentDay' | 'status'>>,
   ): Promise<void> {
     const updateData: {
-      last_interaction_at: string
       current_day?: number
       status?: string
-    } = {
-      last_interaction_at: new Date().toISOString(),
-    }
+    } = {}
 
     if (updates.currentDay !== undefined) {
       updateData.current_day = updates.currentDay
@@ -178,6 +195,32 @@ export class SupabaseDiagnosticRepository implements DiagnosticRepository {
     }
   }
 
+  async listJourneyProgress(params?: {
+    statuses?: JourneyProgress['status'][]
+    limit?: number
+  }): Promise<JourneyProgress[]> {
+    let query = this.supabase
+      .from('journey_progress')
+      .select('*')
+      .order('last_interaction_at', { ascending: true })
+
+    if (params?.statuses && params.statuses.length > 0) {
+      query = query.in('status', params.statuses)
+    }
+
+    if (params?.limit) {
+      query = query.limit(params.limit)
+    }
+
+    const { data, error } = await query
+
+    if (error) {
+      throw new Error(`Failed to list journey progress: ${error.message}`)
+    }
+
+    return (data ?? []).map((row) => this.mapJourneyProgress(row))
+  }
+
   async recordInteraction(userId: string): Promise<void> {
     const { error } = await this.supabase
       .from('journey_progress')
@@ -186,6 +229,28 @@ export class SupabaseDiagnosticRepository implements DiagnosticRepository {
 
     if (error) {
       throw new Error(`Failed to record interaction: ${error.message}`)
+    }
+  }
+
+  async markNurturingSent(userId: string, sentAt = new Date()): Promise<void> {
+    const { error } = await this.supabase
+      .from('journey_progress')
+      .update({ last_nurturing_sent_at: sentAt.toISOString() })
+      .eq('user_id', userId)
+
+    if (error) {
+      throw new Error(`Failed to mark nurturing sent: ${error.message}`)
+    }
+  }
+
+  async markReengagementSent(userId: string, sentAt = new Date()): Promise<void> {
+    const { error } = await this.supabase
+      .from('journey_progress')
+      .update({ last_reengagement_sent_at: sentAt.toISOString() })
+      .eq('user_id', userId)
+
+    if (error) {
+      throw new Error(`Failed to mark reengagement sent: ${error.message}`)
     }
   }
 
@@ -207,6 +272,12 @@ export class SupabaseDiagnosticRepository implements DiagnosticRepository {
       currentDay: row.current_day,
       startedAt: new Date(row.started_at),
       lastInteractionAt: new Date(row.last_interaction_at),
+      lastNurturingSentAt: row.last_nurturing_sent_at
+        ? new Date(row.last_nurturing_sent_at)
+        : null,
+      lastReengagementSentAt: row.last_reengagement_sent_at
+        ? new Date(row.last_reengagement_sent_at)
+        : null,
       status: row.status as JourneyProgress['status'],
     }
   }

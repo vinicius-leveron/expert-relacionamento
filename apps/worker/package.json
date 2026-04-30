@@ -6,16 +6,22 @@
   "scripts": {
     "build": "tsc",
     "dev": "tsx watch src/index.ts",
+    "ingest:rag": "tsx src/ingest-rag.ts",
+    "query:rag": "tsx src/query-rag.ts",
     "start": "node dist/index.js",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
   },
   "dependencies": {
+    "@perpetuo/ai-gateway": "workspace:*",
     "@perpetuo/core": "workspace:*",
     "@perpetuo/database": "workspace:*",
+    "@perpetuo/whatsapp-adapter": "workspace:*",
     "pino": "^9.3.0",
     "pino-pretty": "^11.2.0"
   },
   "devDependencies": {
-    "tsx": "^4.16.0"
+    "tsx": "^4.16.0",
+    "vitest": "^2.0.0"
   }
 }

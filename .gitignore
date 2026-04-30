@@ -4,6 +4,7 @@
 .env
 .env.local
 .env.*.local
+.env.sentry-build-plugin
 *.key
 *.pem
 
@@ -28,3 +29,4 @@ Thumbs.db
 .aiox-core/local/
 .claude/settings.local.json
 .aiox/install-log.txt
+.vercel

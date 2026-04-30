@@ -1,5 +1,20 @@
 import type { SupabaseClient } from '../client.js'
-import type { ConversationRow, Json, MessageRow } from '../types.js'
+import type {
+  ChatAttachmentRow,
+  ConversationRow,
+  Json,
+  MessageAttachmentRow,
+  MessageRow,
+} from '../types.js'
+
+export interface MessageAttachment {
+  id: string
+  fileName: string
+  mimeType: string
+  sizeBytes: number
+  status: string
+  storagePath: string
+}
 
 export interface Message {
   id: string
@@ -8,6 +23,7 @@ export interface Message {
   content: string
   contentType: 'text' | 'image' | 'audio'
   metadata?: Record<string, unknown>
+  attachments?: MessageAttachment[]
   createdAt: Date
 }
 
@@ -24,9 +40,29 @@ export interface Conversation {
 
 export interface ConversationRepository {
   /**
+   * Cria nova conversa
+   */
+  create(params: { userId: string; channel: string }): Promise<Conversation>
+
+  /**
+   * Busca conversa por ID
+   */
+  findById(conversationId: string): Promise<Conversation | null>
+
+  /**
+   * Busca todas as conversas de um usuário
+   */
+  findByUserId(userId: string): Promise<Conversation[]>
+
+  /**
    * Busca ou cria conversa ativa para um usuário
    */
   getOrCreateActive(userId: string, channel: string): Promise<Conversation>
+
+  /**
+   * Busca mensagens de uma conversa
+   */
+  getMessages(conversationId: string, limit?: number): Promise<Message[]>
 
   /**
    * Adiciona mensagem a uma conversa
@@ -37,6 +73,7 @@ export interface ConversationRepository {
     content: string
     contentType?: 'text' | 'image' | 'audio'
     metadata?: Record<string, unknown>
+    attachmentIds?: string[]
   }): Promise<Message>
 
   /**
@@ -48,6 +85,16 @@ export interface ConversationRepository {
    * Busca histórico completo do usuário (para contexto)
    */
   getUserHistory(userId: string, limit?: number): Promise<Message[]>
+
+  /**
+   * Conta mensagens do usuário por tipo a partir de uma data
+   */
+  countUserMessagesByTypeSince(params: {
+    userId: string
+    role: 'user' | 'assistant'
+    contentType: 'text' | 'image' | 'audio'
+    since: Date
+  }): Promise<number>
 
   /**
    * Atualiza resumo da conversa (para compressão de contexto)
@@ -65,6 +112,56 @@ export interface ConversationRepository {
  */
 export class SupabaseConversationRepository implements ConversationRepository {
   constructor(private readonly supabase: SupabaseClient) {}
+
+  async create(params: { userId: string; channel: string }): Promise<Conversation> {
+    const { data, error } = await this.supabase
+      .from('conversations')
+      .insert({
+        user_id: params.userId,
+        channel: params.channel,
+        status: 'active',
+      })
+      .select()
+      .single()
+
+    if (error || !data) {
+      throw new Error(`Failed to create conversation: ${error?.message}`)
+    }
+
+    return this.mapConversation(data, [])
+  }
+
+  async findById(conversationId: string): Promise<Conversation | null> {
+    const { data, error } = await this.supabase
+      .from('conversations')
+      .select('*')
+      .eq('id', conversationId)
+      .single()
+
+    if (error || !data) {
+      return null
+    }
+
+    return this.mapConversation(data, [])
+  }
+
+  async findByUserId(userId: string): Promise<Conversation[]> {
+    const { data, error } = await this.supabase
+      .from('conversations')
+      .select('*')
+      .eq('user_id', userId)
+      .order('updated_at', { ascending: false })
+
+    if (error) {
+      throw new Error(`Failed to find conversations: ${error.message}`)
+    }
+
+    return (data ?? []).map((row) => this.mapConversation(row, []))
+  }
+
+  async getMessages(conversationId: string, limit = 100): Promise<Message[]> {
+    return this.getRecentMessages(conversationId, limit)
+  }
 
   async getOrCreateActive(userId: string, channel: string): Promise<Conversation> {
     // Busca conversa ativa existente
@@ -106,7 +203,8 @@ export class SupabaseConversationRepository implements ConversationRepository {
     role: 'user' | 'assistant'
     content: string
     contentType?: 'text' | 'image' | 'audio'
-    metadata?: Record<string, number | string>
+    metadata?: Record<string, unknown>
+    attachmentIds?: string[]
   }): Promise<Message> {
     const { data, error } = await this.supabase
       .from('messages')
@@ -124,7 +222,21 @@ export class SupabaseConversationRepository implements ConversationRepository {
       throw new Error(`Failed to add message: ${error?.message}`)
     }
 
-    return this.mapMessage(data)
+    if (params.attachmentIds && params.attachmentIds.length > 0) {
+      const { error: linkError } = await this.supabase.from('message_attachments').insert(
+        params.attachmentIds.map((attachmentId) => ({
+          message_id: data.id,
+          attachment_id: attachmentId,
+        })),
+      )
+
+      if (linkError) {
+        throw new Error(`Failed to link message attachments: ${linkError.message}`)
+      }
+    }
+
+    const attachments = await this.getAttachmentsForMessages([data.id])
+    return this.mapMessage(data, attachments.get(data.id) ?? [])
   }
 
   async getRecentMessages(conversationId: string, limit = 50): Promise<Message[]> {
@@ -139,7 +251,10 @@ export class SupabaseConversationRepository implements ConversationRepository {
       throw new Error(`Failed to get messages: ${error.message}`)
     }
 
-    return (data ?? []).map(this.mapMessage)
+    const messages = data ?? []
+    const attachments = await this.getAttachmentsForMessages(messages.map((row) => row.id))
+
+    return messages.map((row) => this.mapMessage(row, attachments.get(row.id) ?? []))
   }
 
   async getUserHistory(userId: string, limit = 100): Promise<Message[]> {
@@ -167,7 +282,42 @@ export class SupabaseConversationRepository implements ConversationRepository {
     }
 
     // Retorna em ordem cronológica
-    return (data ?? []).reverse().map(this.mapMessage)
+    const messages = (data ?? []).reverse()
+    const attachments = await this.getAttachmentsForMessages(messages.map((row) => row.id))
+
+    return messages.map((row) => this.mapMessage(row, attachments.get(row.id) ?? []))
+  }
+
+  async countUserMessagesByTypeSince(params: {
+    userId: string
+    role: 'user' | 'assistant'
+    contentType: 'text' | 'image' | 'audio'
+    since: Date
+  }): Promise<number> {
+    const { data: conversations } = await this.supabase
+      .from('conversations')
+      .select('id')
+      .eq('user_id', params.userId)
+
+    if (!conversations || conversations.length === 0) {
+      return 0
+    }
+
+    const conversationIds = conversations.map((c) => c.id)
+
+    const { count, error } = await this.supabase
+      .from('messages')
+      .select('*', { count: 'exact', head: true })
+      .in('conversation_id', conversationIds)
+      .eq('role', params.role)
+      .eq('content_type', params.contentType)
+      .gte('created_at', params.since.toISOString())
+
+    if (error) {
+      throw new Error(`Failed to count user messages: ${error.message}`)
+    }
+
+    return count ?? 0
   }
 
   async updateSummary(conversationId: string, summary: string): Promise<void> {
@@ -205,7 +355,57 @@ export class SupabaseConversationRepository implements ConversationRepository {
     }
   }
 
-  private mapMessage(row: MessageRow): Message {
+  private async getAttachmentsForMessages(
+    messageIds: string[],
+  ): Promise<Map<string, MessageAttachment[]>> {
+    const result = new Map<string, MessageAttachment[]>()
+
+    if (messageIds.length === 0) {
+      return result
+    }
+
+    const { data: links, error: linksError } = await this.supabase
+      .from('message_attachments')
+      .select('*')
+      .in('message_id', messageIds)
+
+    if (linksError) {
+      throw new Error(`Failed to load message attachments: ${linksError.message}`)
+    }
+
+    const attachmentIds = [...new Set((links ?? []).map((link) => link.attachment_id))]
+    if (attachmentIds.length === 0) {
+      return result
+    }
+
+    const { data: attachments, error: attachmentsError } = await this.supabase
+      .from('chat_attachments')
+      .select('*')
+      .in('id', attachmentIds)
+
+    if (attachmentsError) {
+      throw new Error(`Failed to load attachments: ${attachmentsError.message}`)
+    }
+
+    const attachmentById = new Map(
+      (attachments ?? []).map((attachment) => [attachment.id, this.mapAttachment(attachment)]),
+    )
+
+    for (const link of (links ?? []) as MessageAttachmentRow[]) {
+      const attachment = attachmentById.get(link.attachment_id)
+      if (!attachment) {
+        continue
+      }
+
+      const current = result.get(link.message_id) ?? []
+      current.push(attachment)
+      result.set(link.message_id, current)
+    }
+
+    return result
+  }
+
+  private mapMessage(row: MessageRow, attachments: MessageAttachment[] = []): Message {
     return {
       id: row.id,
       conversationId: row.conversation_id,
@@ -213,7 +413,19 @@ export class SupabaseConversationRepository implements ConversationRepository {
       content: row.content,
       contentType: row.content_type as 'text' | 'image' | 'audio',
       metadata: row.metadata as Record<string, unknown>,
+      attachments,
       createdAt: new Date(row.created_at),
+    }
+  }
+
+  private mapAttachment(row: ChatAttachmentRow): MessageAttachment {
+    return {
+      id: row.id,
+      fileName: row.file_name,
+      mimeType: row.mime_type,
+      sizeBytes: row.size_bytes,
+      status: row.status,
+      storagePath: row.storage_path,
     }
   }
 }

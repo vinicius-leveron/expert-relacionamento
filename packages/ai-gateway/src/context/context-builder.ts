@@ -5,6 +5,15 @@ export interface UserContext {
   archetype?: string // Após diagnóstico: 'provedor' | 'aventureiro' | 'romantico' | 'racional'
   diagnosisCompleted: boolean
   currentDayInJourney: number // Dia na jornada de 30 dias
+  // Assinatura
+  hasActiveSubscription?: boolean
+  subscriptionOfferUrl?: string
+  hasRagAccess?: boolean
+  canAnalyzeImages?: boolean
+  // Rate limiting de imagens (20/mês)
+  imageAnalysisUsedThisMonth?: number
+  imageAnalysisLimit?: number
+  imageAnalysisRemainingThisMonth?: number
 }
 
 export interface ConversationHistory {
@@ -108,11 +117,57 @@ export class ContextBuilder {
 
     // Contexto do usuário
     const contextLines: string[] = []
+
+    // Status de diagnóstico/arquétipo
     if (context.archetype) {
-      contextLines.push(`Arquétipo do usuário: ${context.archetype}`)
+      contextLines.push(`Arquétipo: ${context.archetype}`)
       contextLines.push(`Dia na jornada: ${context.currentDayInJourney}/30`)
     } else if (!context.diagnosisCompleted) {
-      contextLines.push('Status: Usuário ainda não completou o diagnóstico inicial')
+      contextLines.push('Diagnóstico: Ainda não feito')
+    }
+
+    // Status de assinatura e capacidades pós-diagnóstico
+    if (context.diagnosisCompleted && context.hasActiveSubscription === true) {
+      contextLines.push('Assinatura: ATIVA')
+    }
+
+    if (context.diagnosisCompleted && context.hasActiveSubscription === false) {
+      contextLines.push(
+        'Assinatura: INATIVA - Convide gentilmente a assinar para continuar a jornada',
+      )
+      if (context.subscriptionOfferUrl) {
+        contextLines.push(`Link de assinatura: ${context.subscriptionOfferUrl}`)
+      }
+    }
+
+    if (context.diagnosisCompleted && context.hasRagAccess !== undefined) {
+      contextLines.push(
+        `RAG: ${context.hasRagAccess ? 'LIBERADO' : 'BLOQUEADO até assinatura ativa'}`,
+      )
+    }
+
+    if (context.canAnalyzeImages === false) {
+      if (context.diagnosisCompleted && context.hasActiveSubscription === false) {
+        contextLines.push('Análise de imagem: BLOQUEADA até assinatura ativa')
+      } else {
+        contextLines.push('Análise de imagem: BLOQUEADA')
+      }
+    }
+
+    // Rate limiting de imagens
+    if (context.imageAnalysisUsedThisMonth !== undefined) {
+      const limit = context.imageAnalysisLimit ?? 20
+      const used = context.imageAnalysisUsedThisMonth
+      const remaining = context.imageAnalysisRemainingThisMonth ?? limit - used
+
+      if (remaining <= 0) {
+        contextLines.push(`Análises de imagem: LIMITE ATINGIDO (${used}/${limit} este mês)`)
+        contextLines.push(
+          'Se o usuário enviar imagem, explique gentilmente que o limite mensal foi atingido',
+        )
+      } else {
+        contextLines.push(`Análises de imagem: ${used}/${limit} usadas (restam ${remaining})`)
+      }
     }
 
     if (contextLines.length > 0) {

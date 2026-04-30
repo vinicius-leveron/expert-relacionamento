@@ -90,4 +90,32 @@ export class SupabaseUserRepository implements UserRepository {
     await this.save(user)
     return user
   }
+
+  async findOrCreateByEmail(email: string): Promise<User> {
+    const existing = await this.findByEmail(email)
+    if (existing) {
+      return existing
+    }
+
+    const user = User.create({ email })
+    await this.save(user)
+    return user
+  }
+
+  async linkPhone(userId: string, phoneE164: string): Promise<User> {
+    const user = await this.findById(userId)
+    if (!user) {
+      throw new Error(`User not found: ${userId}`)
+    }
+
+    // Check if phone is already used by another user
+    const existingWithPhone = await this.findByPhone(phoneE164)
+    if (existingWithPhone && existingWithPhone.id !== userId) {
+      throw new Error('Phone already linked to another account')
+    }
+
+    const updatedUser = user.withPhone(phoneE164)
+    await this.save(updatedUser)
+    return updatedUser
+  }
 }

@@ -1,17 +1,47 @@
+import { config } from 'dotenv'
+import { resolve } from 'node:path'
+
+// Carrega .env da raiz do monorepo
+config({ path: resolve(process.cwd(), '../../.env') })
 import { serve } from '@hono/node-server'
 import type { AIProviderPort, UserRepository } from '@perpetuo/core'
+import { JwtService, MagicLinkService, VerificationCodeService } from '@perpetuo/core'
+import type { SupabaseClient } from '@perpetuo/database'
 import { Hono } from 'hono'
+import { cors } from 'hono/cors'
 import { logger as honoLogger } from 'hono/logger'
 import pino from 'pino'
 
+import { MessageEmitter } from './events/message-emitter.js'
 import { MessagePipeline } from './pipeline/index.js'
-import { createWhatsAppWebhookRoute, healthRoute } from './routes/index.js'
+import { apiRateLimit, webhookRateLimit } from './middleware/index.js'
+import {
+  createApiRoutes,
+  createPaymentWebhookRoute,
+  createWhatsAppWebhookRoute,
+  healthRoute,
+} from './routes/index.js'
+import { ChatAttachmentStorageService, createEmailSender } from './services/index.js'
 
 // Imports condicionais para evitar erro se env vars não existirem em dev
-const createUserRepository = async () => {
-  const { createSupabaseClient, SupabaseUserRepository } = await import('@perpetuo/database')
+const createPersistence = async () => {
+  const {
+    SupabaseAttachmentRepository,
+    createSupabaseClient,
+    SupabaseConversationRepository,
+    SupabaseDiagnosticRepository,
+    SupabaseSubscriptionRepository,
+    SupabaseUserRepository,
+  } = await import('@perpetuo/database')
   const supabase = createSupabaseClient()
-  return new SupabaseUserRepository(supabase)
+  return {
+    supabase,
+    attachmentRepo: new SupabaseAttachmentRepository(supabase),
+    userRepo: new SupabaseUserRepository(supabase),
+    conversationRepo: new SupabaseConversationRepository(supabase),
+    diagnosticRepo: new SupabaseDiagnosticRepository(supabase),
+    subscriptionRepo: new SupabaseSubscriptionRepository(supabase),
+  }
 }
 
 const createAIProvider = async (): Promise<AIProviderPort> => {
@@ -25,24 +55,132 @@ const createAIProvider = async (): Promise<AIProviderPort> => {
   return new MockAIAdapter()
 }
 
+const createOptionalRAG = async (supabase: SupabaseClient) => {
+  if (!process.env.OPENAI_API_KEY) {
+    return undefined
+  }
+
+  const { OpenAIEmbeddingAdapter, RAGService } = await import('@perpetuo/ai-gateway')
+  return new RAGService({
+    supabase,
+    embeddingProvider: new OpenAIEmbeddingAdapter(),
+  })
+}
+
+const createOptionalAttachmentRAG = async (supabase: SupabaseClient) => {
+  if (!process.env.OPENAI_API_KEY) {
+    return undefined
+  }
+
+  const { AttachmentRAGService, OpenAIEmbeddingAdapter } = await import('@perpetuo/ai-gateway')
+  return new AttachmentRAGService({
+    supabase,
+    embeddingProvider: new OpenAIEmbeddingAdapter(),
+  })
+}
+
+const createOptionalTranscriber = async () => {
+  if (!process.env.OPENAI_API_KEY) {
+    return undefined
+  }
+
+  const { WhisperAdapter } = await import('@perpetuo/ai-gateway')
+  const adapter = new WhisperAdapter()
+  return {
+    transcribe: async (audioUrl: string) => {
+      const result = await adapter.transcribe(audioUrl)
+      return result.text
+    },
+  }
+}
+
+const createChannelAdapter = async () => {
+  if (
+    process.env.WHATSAPP_PROVIDER?.toLowerCase() === 'uazapi' &&
+    process.env.UAZAPI_SUBDOMAIN &&
+    process.env.UAZAPI_INSTANCE_TOKEN
+  ) {
+    const { UazapiAdapter } = await import('@perpetuo/whatsapp-adapter')
+    return new UazapiAdapter({
+      subdomain: process.env.UAZAPI_SUBDOMAIN,
+      instanceToken: process.env.UAZAPI_INSTANCE_TOKEN,
+      webhookSignature: process.env.UAZAPI_WEBHOOK_SIGNATURE,
+    })
+  }
+
+  const { MockChannelAdapter } = await import('@perpetuo/whatsapp-adapter')
+  return new MockChannelAdapter()
+}
+
+const createPaymentAdapter = async () => {
+  if (
+    process.env.PAYMENT_PROVIDER?.toLowerCase() === 'hubla' &&
+    process.env.HUBLA_WEBHOOK_TOKEN
+  ) {
+    const { HublaPaymentAdapter } = await import('@perpetuo/payment-gateway')
+    return new HublaPaymentAdapter({
+      webhookToken: process.env.HUBLA_WEBHOOK_TOKEN,
+    })
+  }
+
+  return undefined
+}
+
 const logger = pino({
   level: process.env.LOG_LEVEL ?? 'info',
   transport: process.env.NODE_ENV !== 'production' ? { target: 'pino-pretty' } : undefined,
 })
 
-async function main() {
-  // Bootstrap (DI manual por enquanto)
-  const { MockChannelAdapter } = await import('@perpetuo/whatsapp-adapter')
+// JWT secret - usa env var ou gera um para desenvolvimento
+const JWT_SECRET = process.env.JWT_SECRET ?? 'dev-secret-change-in-production-' + Math.random()
+if (!process.env.JWT_SECRET) {
+  logger.warn('JWT_SECRET not set, using random dev secret (sessions will be lost on restart)')
+}
 
+// App base URL para magic links
+const APP_BASE_URL = process.env.APP_BASE_URL ?? 'http://localhost:8081'
+
+async function main() {
   let userRepo: UserRepository
+  let conversationRepo
+  let diagnosticRepo
+  let subscriptionRepo
+  let attachmentRepo
+  let attachmentStorage
+  let sessionRepo
+  let magicLinkRepo
+  let verificationCodeRepo
+  let rag
+  let attachmentRag
   try {
-    userRepo = await createUserRepository()
+    const persistence = await createPersistence()
+    userRepo = persistence.userRepo
+    conversationRepo = persistence.conversationRepo
+    diagnosticRepo = persistence.diagnosticRepo
+    subscriptionRepo = persistence.subscriptionRepo
+    attachmentRepo = persistence.attachmentRepo
+    attachmentStorage = new ChatAttachmentStorageService(persistence.supabase)
+    rag = await createOptionalRAG(persistence.supabase)
+    attachmentRag = await createOptionalAttachmentRAG(persistence.supabase)
+
+    // Auth repositories
+    const {
+      SupabaseSessionRepository,
+      SupabaseMagicLinkRepository,
+      SupabaseVerificationCodeRepository,
+    } = await import('@perpetuo/database')
+    sessionRepo = new SupabaseSessionRepository(persistence.supabase)
+    magicLinkRepo = new SupabaseMagicLinkRepository(persistence.supabase)
+    verificationCodeRepo = new SupabaseVerificationCodeRepository(persistence.supabase)
   } catch {
-    // Fallback para mock em desenvolvimento sem Supabase
-    logger.warn('Supabase not configured, using in-memory mock repository')
+    // Fallback para mock em desenvolvimento sem Supabase.
+    logger.warn('Supabase not configured, using in-memory mock repository and disabling persistence')
     const { createMockUserRepository } = await import('./repositories/mock-user.repository.js')
     userRepo = createMockUserRepository()
   }
+
+  const transcriber = await createOptionalTranscriber()
+  const paymentAdapter = await createPaymentAdapter()
 
   // AI Provider (real ou mock baseado em env)
   const aiProvider = await createAIProvider()
@@ -52,14 +190,22 @@ async function main() {
     logger.info(`Using ${aiProvider.providerName} AI provider`)
   }
 
-  // TODO: Substituir por adapter real após ADR 0001
-  const channelAdapter = new MockChannelAdapter()
+  const channelAdapter = await createChannelAdapter()
 
   const pipeline = new MessagePipeline({
     channel: channelAdapter,
     userRepo,
     aiProvider,
     logger,
+    conversationRepo,
+    attachmentRepo,
+    diagnosticRepo,
+    subscriptionRepo,
+    rag,
+    attachmentRag,
+    transcriber,
+    inlineImageStorage: attachmentStorage,
+    paymentUrl: process.env.PAYMENT_URL,
   })
 
   const app = new Hono()
@@ -67,9 +213,97 @@ async function main() {
   // Middleware
   app.use('*', honoLogger())
 
+  // CORS para o app mobile/web
+  app.use(
+    '/api/*',
+    cors({
+      origin: [
+        'http://localhost:8081',
+        'http://127.0.0.1:8081',
+        'http://localhost:19006',
+        'http://127.0.0.1:19006',
+        'exp://localhost:8081',
+        'exp://127.0.0.1:8081',
+      ],
+      allowMethods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+      allowHeaders: ['Content-Type', 'Authorization'],
+      credentials: true,
+    }),
+  )
+
+  // Rate limiting
+  app.use('/api/*', apiRateLimit)
+  app.use('/webhook/*', webhookRateLimit)
+
   // Routes
   app.route('/health', healthRoute)
   app.route('/webhook/whatsapp', createWhatsAppWebhookRoute(pipeline))
+  app.route(
+    '/webhook/payment',
+    createPaymentWebhookRoute({
+      paymentAdapter,
+      userRepo,
+      subscriptionRepo,
+      logger,
+    }),
+  )
+
+  // API REST para o app (se auth configurado)
+  if (sessionRepo && magicLinkRepo && verificationCodeRepo) {
+    const jwtService = new JwtService({ secret: JWT_SECRET })
+    const emailSender = createEmailSender(logger)
+    const magicLinkService = new MagicLinkService(magicLinkRepo, emailSender, {
+      baseUrl: APP_BASE_URL,
+    })
+    const verificationCodeService = new VerificationCodeService(verificationCodeRepo)
+
+    // MessageEmitter para SSE
+    const messageEmitter = new MessageEmitter()
+
+    // App channel adapter com emitter
+    const { AppChannelAdapter } = await import('@perpetuo/app-adapter')
+    const appChannelAdapter = new AppChannelAdapter({ messageEmitter })
+
+    // Pipeline para o canal app
+    const appPipeline = new MessagePipeline({
+      channel: appChannelAdapter,
+      userRepo,
+      aiProvider,
+      logger,
+      conversationRepo,
+      attachmentRepo,
+      diagnosticRepo,
+      subscriptionRepo,
+      rag,
+      attachmentRag,
+      transcriber,
+      paymentUrl: process.env.PAYMENT_URL,
+    })
+
+    app.route(
+      '/api/v1',
+      createApiRoutes({
+        jwtService,
+        magicLinkService,
+        verificationCodeService,
+        sessionRepo,
+        userRepo,
+        conversationRepo,
+        diagnosticRepo,
+        subscriptionRepo,
+        attachmentRepo,
+        attachmentStorage,
+        messageEmitter,
+        appPipeline,
+        paymentUrl: process.env.PAYMENT_URL,
+        logger,
+      }),
+    )
+
+    logger.info('API REST routes enabled at /api/v1')
+  } else {
+    logger.warn('Auth repositories not configured, API REST routes disabled')
+  }
 
   // Start server
   const port = Number(process.env.PORT) || 3000

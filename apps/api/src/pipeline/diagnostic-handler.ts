@@ -1,4 +1,9 @@
-import { ARCHETYPE_INSIGHTS, type Archetype, type ConversationHistory } from '@perpetuo/ai-gateway'
+import {
+  ARCHETYPE_INSIGHTS,
+  buildDirectionalPlan,
+  type Archetype,
+  type ConversationHistory,
+} from '@perpetuo/ai-gateway'
 import type { DiagnosticRepository } from '@perpetuo/database'
 
 export interface DiagnosticScores {
@@ -105,5 +110,13 @@ ${challenges}
 *Seu foco na jornada:* ${insights.focus}
 
 Que tal começarmos uma jornada de 30 dias juntos? Vou te ajudar a fortalecer seus pontos fortes e trabalhar nos desafios. É só me dizer que quer começar!`
+  }
+
+  appendDirectionalPlan(message: string, archetype: Archetype): string {
+    if (message.includes('## Seu Plano Direcional de 30 Dias')) {
+      return message
+    }
+
+    return `${message.trim()}\n\n${buildDirectionalPlan(archetype)}`
   }
 }

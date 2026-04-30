@@ -6,4 +6,6 @@ export interface UserRepository {
   findByEmail(email: string): Promise<User | null>
   save(user: User): Promise<void>
   findOrCreateByPhone(phoneE164: string): Promise<User>
+  findOrCreateByEmail(email: string): Promise<User>
+  linkPhone(userId: string, phoneE164: string): Promise<User>
 }

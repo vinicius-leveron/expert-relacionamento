@@ -45,3 +45,10 @@ export const ISABELA_RETURNING = `${ISABELA_BASE}
 O usuário já conversou com você antes. Retome de onde pararam.
 Demonstre que você lembra do contexto anterior.
 `
+
+export const ATTACHMENT_CITATION_SYSTEM_ADDITION = `
+## Uso de Arquivos Anexados
+- Quando usar informações vindas de arquivos anexados, cite a fonte no fim da frase usando o formato [Arquivo: nome-do-arquivo]
+- Não cite arquivo que você não usou na resposta
+- Se o anexo não trouxer evidência suficiente, deixe isso claro em vez de completar lacunas
+`

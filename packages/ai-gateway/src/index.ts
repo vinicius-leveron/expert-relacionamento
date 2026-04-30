@@ -13,6 +13,10 @@ export {
 
 // RAG
 export {
+  AttachmentRAGService,
+  type AttachmentRAGServiceConfig,
+  type AttachmentRAGSearchOptions,
+  type AttachmentKnowledgeChunk,
   RAGService,
   type RAGServiceConfig,
   type RAGSearchOptions,
@@ -38,6 +42,7 @@ export {
 
 // Prompts
 export {
+  ATTACHMENT_CITATION_SYSTEM_ADDITION,
   // Base
   ISABELA_BASE,
   ISABELA_GREETING,
@@ -50,6 +55,7 @@ export {
   type Archetype,
   // Journey
   getJourneyPrompt,
+  buildDirectionalPlan,
   DAILY_CHECKIN,
   type JourneyDay,
   // Image Analysis

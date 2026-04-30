@@ -87,6 +87,7 @@ ${formatted}
     title: string
     sourceType: 'pdf' | 'transcript' | 'article' | 'manual'
     sourceUrl?: string
+    metadata?: Record<string, unknown>
     chunks: Array<{ content: string; metadata?: Record<string, unknown> }>
   }): Promise<string> {
     // 1. Cria o documento
@@ -96,6 +97,7 @@ ${formatted}
         title: params.title,
         source_type: params.sourceType,
         source_url: params.sourceUrl,
+        metadata: params.metadata ?? {},
       })
       .select('id')
       .single()

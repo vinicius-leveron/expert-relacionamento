@@ -7,6 +7,11 @@ export interface WhisperConfig {
 
 const DEFAULT_MODEL = 'whisper-1'
 
+type TranscriptionFileFormat = {
+  fileName: string
+  mimeType: string
+}
+
 /**
  * WhisperAdapter - Transcrição usando OpenAI Whisper
  */
@@ -34,27 +39,19 @@ export class WhisperAdapter implements TranscriptionPort {
 
     const buffer = Buffer.from(await response.arrayBuffer())
 
-    // Detecta formato pelo URL ou content-type
     const contentType = response.headers.get('content-type') ?? ''
-    let format: 'mp3' | 'wav' | 'ogg' = 'ogg'
-    if (contentType.includes('mp3') || audioUrl.includes('.mp3')) {
-      format = 'mp3'
-    } else if (contentType.includes('wav') || audioUrl.includes('.wav')) {
-      format = 'wav'
-    }
-
-    return this.transcribeBuffer(buffer, format)
+    return this.transcribeBuffer(buffer, this.resolveFormat(audioUrl, contentType))
   }
 
   async transcribeBuffer(
     buffer: Buffer,
-    format: 'mp3' | 'wav' | 'ogg',
+    format: TranscriptionFileFormat,
   ): Promise<TranscriptionResult> {
     const formData = new FormData()
 
     // Cria um blob a partir do buffer
-    const blob = new Blob([buffer], { type: `audio/${format}` })
-    formData.append('file', blob, `audio.${format}`)
+    const blob = new Blob([buffer], { type: format.mimeType })
+    formData.append('file', blob, format.fileName)
     formData.append('model', this.model)
     formData.append('language', 'pt') // Português
 
@@ -77,6 +74,49 @@ export class WhisperAdapter implements TranscriptionPort {
       text: data.text,
       language: 'pt',
     }
+  }
+
+  private resolveFormat(audioUrl: string, contentType: string): TranscriptionFileFormat {
+    const normalizedType = contentType.split(';')[0]?.trim().toLowerCase() ?? ''
+    const normalizedUrl = audioUrl.toLowerCase()
+
+    if (
+      normalizedType.includes('mpeg') ||
+      normalizedType.includes('mp3') ||
+      normalizedUrl.includes('.mp3') ||
+      normalizedUrl.includes('.mpeg') ||
+      normalizedUrl.includes('.mpga')
+    ) {
+      return { fileName: 'audio.mp3', mimeType: 'audio/mpeg' }
+    }
+
+    if (normalizedType.includes('wav') || normalizedUrl.includes('.wav')) {
+      return { fileName: 'audio.wav', mimeType: 'audio/wav' }
+    }
+
+    if (normalizedType.includes('webm') || normalizedUrl.includes('.webm')) {
+      return { fileName: 'audio.webm', mimeType: 'audio/webm' }
+    }
+
+    if (normalizedType.includes('ogg') || normalizedUrl.includes('.ogg')) {
+      return { fileName: 'audio.ogg', mimeType: 'audio/ogg' }
+    }
+
+    if (normalizedType.includes('aac') || normalizedUrl.includes('.aac')) {
+      return { fileName: 'audio.aac', mimeType: 'audio/aac' }
+    }
+
+    if (
+      normalizedType.includes('mp4') ||
+      normalizedType.includes('m4a') ||
+      normalizedType.includes('x-m4a') ||
+      normalizedUrl.includes('.mp4') ||
+      normalizedUrl.includes('.m4a')
+    ) {
+      return { fileName: 'audio.m4a', mimeType: 'audio/mp4' }
+    }
+
+    return { fileName: 'audio.webm', mimeType: 'audio/webm' }
   }
 }
 

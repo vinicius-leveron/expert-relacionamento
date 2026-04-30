@@ -13,6 +13,9 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run"
   },
+  "dependencies": {
+    "jose": "^5.2.0"
+  },
   "devDependencies": {
     "vitest": "^2.0.0"
   }

@@ -2,13 +2,17 @@ import type { User } from '../user/user.entity.js'
 import type { UserRepository } from '../user/user.repository.js'
 
 export interface IdentitySource {
-  type: 'phone' | 'email'
+  type: 'phone' | 'email' | 'user_id'
   value: string
 }
 
 /**
  * IdentityResolver - Resolve identidades externas para user_id interno (ADR 0011)
- * Usado no início do pipeline de webhook
+ *
+ * Tipos de identidade:
+ * - phone: Usado pelo WhatsApp webhook
+ * - email: Usado pelo app via magic link
+ * - user_id: Usado quando o JWT já validou a identidade (app autenticado)
  */
 export class IdentityResolver {
   constructor(private readonly userRepo: UserRepository) {}
@@ -18,17 +22,16 @@ export class IdentityResolver {
       return this.userRepo.findOrCreateByPhone(source.value)
     }
 
-    // Email lookup (para webhook de pagamento)
-    const existing = await this.userRepo.findByEmail(source.value)
-    if (existing) {
-      return existing
+    if (source.type === 'user_id') {
+      // JWT já validou a identidade, apenas buscar usuário
+      const user = await this.userRepo.findById(source.value)
+      if (!user) {
+        throw new Error(`User not found: ${source.value}`)
+      }
+      return user
     }
 
-    // Email sem usuário existente - criar novo
-    // (raro: normalmente o usuário já existe via WhatsApp)
-    const { User } = await import('../user/user.entity.js')
-    const user = User.create({ email: source.value })
-    await this.userRepo.save(user)
-    return user
+    // Email lookup/create (para app via magic link)
+    return this.userRepo.findOrCreateByEmail(source.value)
   }
 }

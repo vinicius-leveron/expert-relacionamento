@@ -6,7 +6,7 @@ CREATE EXTENSION IF NOT EXISTS vector;
 
 -- Documents table (source files: PDFs, transcripts, etc)
 CREATE TABLE IF NOT EXISTS public.knowledge_documents (
-  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   title VARCHAR(500) NOT NULL,
   source_type VARCHAR(50) NOT NULL, -- 'pdf', 'transcript', 'article', 'manual'
   source_url TEXT, -- Original URL or file path
@@ -17,7 +17,7 @@ CREATE TABLE IF NOT EXISTS public.knowledge_documents (
 
 -- Chunks table (pieces of documents with embeddings)
 CREATE TABLE IF NOT EXISTS public.knowledge_chunks (
-  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   document_id UUID NOT NULL REFERENCES public.knowledge_documents(id) ON DELETE CASCADE,
   content TEXT NOT NULL, -- The actual text chunk
   embedding vector(1536), -- OpenAI ada-002 dimension
