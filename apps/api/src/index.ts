@@ -137,9 +137,10 @@ if (!process.env.JWT_SECRET) {
   logger.warn('JWT_SECRET not set, using random dev secret (sessions will be lost on restart)')
 }
 
-// App base URL para magic links
-const APP_BASE_URL = process.env.APP_BASE_URL ?? 'http://localhost:8081'
 const WEB_APP_URL = process.env.WEB_APP_URL
+
+// App base URL para magic links
+const APP_BASE_URL = WEB_APP_URL ?? process.env.APP_BASE_URL ?? 'http://localhost:8081'
 
 const allowedOrigins = new Set(
   [
