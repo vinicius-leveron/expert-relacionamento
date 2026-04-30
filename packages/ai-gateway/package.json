@@ -4,14 +4,38 @@
   "private": true,
   "type": "module",
   "exports": {
-    ".": "./dist/index.js",
-    "./providers": "./dist/providers/index.js",
-    "./embeddings": "./dist/embeddings/index.js",
-    "./rag": "./dist/rag/index.js",
-    "./transcription": "./dist/transcription/index.js",
-    "./context": "./dist/context/index.js",
-    "./prompts": "./dist/prompts/index.js",
-    "./diagnostic": "./dist/diagnostic/index.js"
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./providers": {
+      "types": "./dist/providers/index.d.ts",
+      "default": "./dist/providers/index.js"
+    },
+    "./embeddings": {
+      "types": "./dist/embeddings/index.d.ts",
+      "default": "./dist/embeddings/index.js"
+    },
+    "./rag": {
+      "types": "./dist/rag/index.d.ts",
+      "default": "./dist/rag/index.js"
+    },
+    "./transcription": {
+      "types": "./dist/transcription/index.d.ts",
+      "default": "./dist/transcription/index.js"
+    },
+    "./context": {
+      "types": "./dist/context/index.d.ts",
+      "default": "./dist/context/index.js"
+    },
+    "./prompts": {
+      "types": "./dist/prompts/index.d.ts",
+      "default": "./dist/prompts/index.js"
+    },
+    "./diagnostic": {
+      "types": "./dist/diagnostic/index.d.ts",
+      "default": "./dist/diagnostic/index.js"
+    }
   },
   "scripts": {
     "build": "tsc",
