@@ -5,6 +5,7 @@ import {
   FlatList,
   StyleSheet,
   ActivityIndicator,
+  TouchableOpacity,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { DrawerContentComponentProps } from '@react-navigation/drawer';
@@ -17,42 +18,7 @@ import { useChatStore } from '@/stores/chat.store';
 import { useAuthStore } from '@/stores/auth.store';
 import { NewConversationButton } from './NewConversationButton';
 import { ConversationListItem } from './ConversationListItem';
-import {
-  ConversationCategories,
-  type ConversationCategory,
-} from './ConversationCategories';
 import { colors, spacing, typography, getShadow } from '@/theme';
-
-const DRAWER_CATEGORIES: ConversationCategory[] = [
-  {
-    id: 'reconquista',
-    title: 'Reconquista',
-    description: 'Quero retomar contato sem parecer desesperado.',
-    icon: 'heart-outline',
-    prompt: 'Quero ajuda para retomar contato com alguém sem parecer desesperado. Me guia pelo melhor próximo passo.',
-  },
-  {
-    id: 'mensagens',
-    title: 'Mensagens',
-    description: 'Me ajuda a responder uma conversa delicada.',
-    icon: 'chatbubble-ellipses-outline',
-    prompt: 'Me ajuda a responder uma conversa delicada sem soar carente, frio ou agressivo.',
-  },
-  {
-    id: 'conflitos',
-    title: 'Conflitos',
-    description: 'Preciso lidar com uma briga sem piorar tudo.',
-    icon: 'flame-outline',
-    prompt: 'Estou lidando com um conflito no relacionamento e preciso agir sem piorar a situação.',
-  },
-  {
-    id: 'clareza',
-    title: 'Clareza',
-    description: 'Quero entender o que essa relação realmente é.',
-    icon: 'compass-outline',
-    prompt: 'Quero entender com clareza o estágio dessa relação e qual leitura mais madura eu deveria fazer agora.',
-  },
-];
 
 export function ConversationDrawer({ navigation }: DrawerContentComponentProps) {
   const insets = useSafeAreaInsets();
@@ -115,24 +81,6 @@ export function ConversationDrawer({ navigation }: DrawerContentComponentProps) 
     [selectConversation, prepareConversationState, chatStore, navigation]
   );
 
-  const handleSelectCategory = useCallback(
-    async (category: ConversationCategory) => {
-      try {
-        const newConversation = await createConversation();
-        prepareConversationState(newConversation.id);
-        useConversationsStore.getState().updateConversationPreview({
-          id: newConversation.id,
-          summary: category.prompt,
-        });
-        navigation.closeDrawer();
-        await chatStore.sendMessage(category.prompt);
-      } catch (error) {
-        console.error('Erro ao iniciar conversa por categoria:', error);
-      }
-    },
-    [createConversation, prepareConversationState, navigation, chatStore],
-  );
-
   const handleDeleteConversation = useCallback(
     async (id: string) => {
       try {
@@ -188,10 +136,21 @@ export function ConversationDrawer({ navigation }: DrawerContentComponentProps) 
     <View style={[styles.container, { paddingTop: insets.top }]}>
       {/* Header */}
       <View style={styles.header}>
-        <View style={styles.logoContainer}>
-          <Ionicons name="heart" size={24} color={colors.primary} />
+        <View style={styles.brand}>
+          <View style={styles.logoContainer}>
+            <Ionicons name="heart" size={24} color={colors.primary} />
+          </View>
+          <Text style={styles.title}>Perpétuo</Text>
         </View>
-        <Text style={styles.title}>Perpétuo</Text>
+        <TouchableOpacity
+          style={styles.closeButton}
+          onPress={() => navigation.closeDrawer()}
+          activeOpacity={0.75}
+          accessibilityLabel="Fechar menu de conversas"
+          accessibilityRole="button"
+        >
+          <Ionicons name="close" size={22} color={colors.textSecondary} />
+        </TouchableOpacity>
       </View>
 
       {/* New Conversation Button */}
@@ -216,12 +175,6 @@ export function ConversationDrawer({ navigation }: DrawerContentComponentProps) 
         showsVerticalScrollIndicator={false}
       />
 
-      <ConversationCategories
-        categories={DRAWER_CATEGORIES}
-        onSelect={handleSelectCategory}
-        disabled={isLoading || chatStore.isUploadingAttachment}
-      />
-
       {/* Footer */}
       <View style={[styles.footer, { paddingBottom: insets.bottom + spacing.md }]}>
         <Text style={styles.footerText}>
@@ -240,10 +193,15 @@ const styles = StyleSheet.create({
   header: {
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'space-between',
     paddingHorizontal: spacing.lg,
     paddingVertical: spacing.md,
     borderBottomWidth: 1,
     borderBottomColor: colors.border,
+  },
+  brand: {
+    flexDirection: 'row',
+    alignItems: 'center',
   },
   logoContainer: {
     width: 40,
@@ -259,6 +217,16 @@ const styles = StyleSheet.create({
     ...typography.h2,
     color: colors.textPrimary,
     fontFamily: 'Inter_700Bold',
+  },
+  closeButton: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.gray50,
+    borderWidth: 1,
+    borderColor: colors.border,
   },
   sectionTitle: {
     ...typography.caption,

@@ -1,8 +1,16 @@
+import { useEffect } from 'react';
 import { Tabs } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
+import { DrawerActions, useNavigation } from '@react-navigation/native';
 import { colors } from '@/theme';
 
 export default function TabsLayout() {
+  const navigation = useNavigation();
+
+  useEffect(() => {
+    navigation.dispatch(DrawerActions.closeDrawer());
+  }, [navigation]);
+
   return (
     <Tabs
       screenOptions={{
@@ -33,6 +41,16 @@ export default function TabsLayout() {
           headerShown: false,
           tabBarIcon: ({ color, size }) => (
             <Ionicons name="chatbubbles" size={size} color={color} />
+          ),
+        }}
+      />
+      <Tabs.Screen
+        name="categories"
+        options={{
+          title: 'Categorias',
+          headerTitle: 'Categorias',
+          tabBarIcon: ({ color, size }) => (
+            <Ionicons name="apps" size={size} color={color} />
           ),
         }}
       />

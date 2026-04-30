@@ -132,7 +132,7 @@ export default function ChatScreen() {
   }, [cleanupLocalAudioFile, stopRecordingTicker]);
 
   const handleOpenDrawer = useCallback(() => {
-    navigation.dispatch(DrawerActions.openDrawer());
+    navigation.dispatch(DrawerActions.toggleDrawer());
   }, [navigation]);
 
   useEffect(() => {
