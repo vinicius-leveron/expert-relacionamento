@@ -1,6 +1,10 @@
 import type { EmailSender } from '@perpetuo/core'
 import type { Logger } from 'pino'
 
+export function isEmailDeliveryConfigured(): boolean {
+  return Boolean(process.env.RESEND_API_KEY?.trim() && process.env.RESEND_FROM_EMAIL?.trim())
+}
+
 /**
  * Mock email sender for development
  * In production, replace with real email service (SendGrid, AWS SES, etc.)
@@ -81,20 +85,34 @@ export class ResendEmailSender implements EmailSender {
   }
 }
 
+export class DisabledEmailSender implements EmailSender {
+  async sendMagicLink(): Promise<void> {
+    throw new Error('Email delivery is not configured')
+  }
+}
+
 /**
  * Creates the appropriate email sender based on environment
  */
 export function createEmailSender(logger: Logger): EmailSender {
-  const resendApiKey = process.env.RESEND_API_KEY
+  const resendApiKey = process.env.RESEND_API_KEY?.trim()
+  const resendFromEmail = process.env.RESEND_FROM_EMAIL?.trim()
 
-  if (resendApiKey) {
+  if (resendApiKey && resendFromEmail) {
     logger.info('Using Resend email sender')
     return new ResendEmailSender({
       apiKey: resendApiKey,
-      fromEmail: process.env.RESEND_FROM_EMAIL,
+      fromEmail: resendFromEmail,
     })
   }
 
-  logger.warn('RESEND_API_KEY not set, using mock email sender')
+  if (process.env.NODE_ENV === 'production') {
+    logger.error(
+      'RESEND_API_KEY and RESEND_FROM_EMAIL must be configured in production; email delivery disabled',
+    )
+    return new DisabledEmailSender()
+  }
+
+  logger.warn('Resend email env vars not set, using mock email sender')
   return new MockEmailSender(logger)
 }

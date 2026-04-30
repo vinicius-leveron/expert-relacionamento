@@ -2,6 +2,7 @@ import { Hono } from 'hono'
 import type { UserRepository, JwtService, MagicLinkService, VerificationCodeService } from '@perpetuo/core'
 import type { SupabaseSessionRepository } from '@perpetuo/database'
 import type { Logger } from 'pino'
+import { isEmailDeliveryConfigured } from '../../services/email.service.js'
 
 export interface AuthRoutesConfig {
   jwtService: JwtService
@@ -23,7 +24,7 @@ export function createAuthRoutes(config: AuthRoutesConfig) {
   app.post('/magic-link', async (c) => {
     const body = await c.req.json<{ email?: string }>()
     const isProduction = process.env.NODE_ENV === 'production'
-    const hasEmailDelivery = !isProduction || Boolean(process.env.RESEND_API_KEY)
+    const hasEmailDelivery = isEmailDeliveryConfigured()
 
     if (!body.email || typeof body.email !== 'string') {
       return c.json(
@@ -49,6 +50,20 @@ export function createAuthRoutes(config: AuthRoutesConfig) {
       )
     }
 
+    if (isProduction && !hasEmailDelivery) {
+      logger.error({ email }, 'Magic link requested without email delivery configured')
+      return c.json(
+        {
+          success: false,
+          error: {
+            code: 'EMAIL_NOT_CONFIGURED',
+            message: 'O login por email não está configurado em produção.',
+          },
+        },
+        503,
+      )
+    }
+
     try {
       const link = await magicLinkService.sendMagicLink(email)
       logger.info(
@@ -59,7 +74,7 @@ export function createAuthRoutes(config: AuthRoutesConfig) {
       )
 
       // Em desenvolvimento, retorna o link para facilitar testes
-      const shouldReturnDevLink = !hasEmailDelivery || !isProduction
+      const shouldReturnDevLink = !isProduction
 
       return c.json({
         success: true,

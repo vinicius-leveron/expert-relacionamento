@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
 import pino from 'pino'
-import type { JwtService, MagicLinkService, UserRepository, VerificationCodeService } from '@perpetuo/core'
+import { User, type JwtService, type MagicLinkService, type UserRepository, type VerificationCodeService } from '@perpetuo/core'
 import type {
   Conversation,
   Message,
@@ -89,21 +89,36 @@ function createAppPipeline(overrides?: Partial<MessagePipeline>) {
   } as unknown as MessagePipeline
 }
 
-function createUserRepo(userId = 'user-1'): UserRepository {
+function createUserRepo(
+  userId = 'user-1',
+  overrides?: {
+    email?: string | null
+    phoneE164?: string | null
+    displayName?: string | null
+    avatarStoragePath?: string | null
+  },
+): UserRepository {
+  let currentUser = User.reconstitute({
+    id: userId,
+    email: overrides?.email ?? 'user@example.com',
+    phoneE164: overrides?.phoneE164 ?? null,
+    displayName: overrides?.displayName ?? null,
+    avatarStoragePath: overrides?.avatarStoragePath ?? null,
+    createdAt: new Date('2026-04-29T12:00:00.000Z'),
+    updatedAt: new Date('2026-04-29T12:00:00.000Z'),
+  })
+
   return {
     findById: vi.fn(async (id: string) =>
       id === userId
-        ? {
-            id: userId,
-            email: 'user@example.com',
-            phoneE164: null,
-            createdAt: new Date('2026-04-29T12:00:00.000Z'),
-          }
+        ? currentUser
         : null,
     ),
     findByPhone: vi.fn(async () => null),
     findByEmail: vi.fn(async () => null),
-    save: vi.fn(async () => {}),
+    save: vi.fn(async (user: User) => {
+      currentUser = user
+    }),
     findOrCreateByPhone: vi.fn(async () => {
       throw new Error('Not implemented in test')
     }),
@@ -182,6 +197,7 @@ describe('createApiRoutes image chat flow', () => {
     } as unknown as SupabaseDiagnosticRepository
     const subscriptionRepo = {
       getActiveByUserId: vi.fn(async () => null),
+      getLatestByUserId: vi.fn(async () => null),
     } as unknown as SupabaseSubscriptionRepository
     const app = createRoutes({
       diagnosticRepo,
@@ -201,17 +217,48 @@ describe('createApiRoutes image chat flow', () => {
       success: true,
       data: {
         email: 'user@example.com',
+        displayName: null,
+        avatarUrl: null,
         subscription: null,
         access: {
           diagnosisCompleted: true,
           hasActiveSubscription: false,
+          hasChatAccess: false,
           hasJourneyAccess: false,
           canAnalyzeImages: false,
         },
         commerce: {
           checkoutUrl: 'https://perpetuo.com.br/assinar',
+          nativeCheckoutMode: 'external_link',
           canUpgrade: true,
         },
+      },
+    })
+  })
+
+  it('atualiza displayName do perfil autenticado', async () => {
+    const userRepo = createUserRepo('user-1', {
+      displayName: null,
+    })
+    const app = createRoutes({ userRepo })
+
+    const response = await app.request('http://localhost/profile', {
+      method: 'PUT',
+      headers: {
+        Authorization: 'Bearer test-token',
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        displayName: 'Vinicius Oliveira',
+      }),
+    })
+
+    expect(response.status).toBe(200)
+    expect(await response.json()).toMatchObject({
+      success: true,
+      data: {
+        displayName: 'Vinicius Oliveira',
+        avatarUrl: null,
       },
     })
   })

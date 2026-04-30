@@ -28,12 +28,14 @@ export default function EditProfileScreen() {
     mediaType: 'image/jpeg' | 'image/png' | 'image/webp';
   } | null>(null);
   const [shouldRemoveAvatar, setShouldRemoveAvatar] = useState(false);
-  const [name, setName] = useState(profile?.displayName ?? user?.email?.split('@')[0] || '');
+  const [name, setName] = useState(
+    profile?.displayName ?? user?.email?.split('@')[0] ?? '',
+  );
   const [isSaving, setIsSaving] = useState(false);
 
   useEffect(() => {
     setAvatar(profile?.avatarUrl ?? null);
-    setName(profile?.displayName ?? user?.email?.split('@')[0] || '');
+    setName(profile?.displayName ?? user?.email?.split('@')[0] ?? '');
   }, [profile?.avatarUrl, profile?.displayName, user?.email]);
 
   const handlePickImage = async () => {

@@ -1,20 +1,52 @@
 import { Hono } from 'hono'
 
-export const healthRoute = new Hono()
+type ReadinessStatus = 'ok' | 'error'
 
-healthRoute.get('/', (c) => {
-  return c.json({
-    status: 'ok',
-    timestamp: new Date().toISOString(),
-  })
-})
+export interface HealthRouteConfig {
+  checks: {
+    database: boolean
+    email: boolean
+    payment: boolean
+    storage: boolean
+    ai: boolean
+    publicUrls: boolean
+  }
+}
 
-healthRoute.get('/ready', async (c) => {
-  // TODO: Verificar conexão com Supabase
-  return c.json({
-    status: 'ready',
-    checks: {
-      database: 'ok',
-    },
+function toStatus(value: boolean): ReadinessStatus {
+  return value ? 'ok' : 'error'
+}
+
+export function createHealthRoute(config: HealthRouteConfig) {
+  const app = new Hono()
+
+  app.get('/', (c) => {
+    return c.json({
+      status: 'ok',
+      timestamp: new Date().toISOString(),
+    })
   })
-})
+
+  app.get('/ready', (c) => {
+    const checks = {
+      database: toStatus(config.checks.database),
+      email: toStatus(config.checks.email),
+      payment: toStatus(config.checks.payment),
+      storage: toStatus(config.checks.storage),
+      ai: toStatus(config.checks.ai),
+      publicUrls: toStatus(config.checks.publicUrls),
+    }
+
+    const isReady = Object.values(checks).every((status) => status === 'ok')
+
+    return c.json(
+      {
+        status: isReady ? 'ready' : 'degraded',
+        checks,
+      },
+      isReady ? 200 : 503,
+    )
+  })
+
+  return app
+}

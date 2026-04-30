@@ -16,6 +16,8 @@ export type Database = {
           id: string
           phone_e164: string | null
           email: string | null
+          display_name: string | null
+          avatar_storage_path: string | null
           created_at: string
           updated_at: string
         }
@@ -23,6 +25,8 @@ export type Database = {
           id?: string
           phone_e164?: string | null
           email?: string | null
+          display_name?: string | null
+          avatar_storage_path?: string | null
           created_at?: string
           updated_at?: string
         }
@@ -30,6 +34,8 @@ export type Database = {
           id?: string
           phone_e164?: string | null
           email?: string | null
+          display_name?: string | null
+          avatar_storage_path?: string | null
           created_at?: string
           updated_at?: string
         }

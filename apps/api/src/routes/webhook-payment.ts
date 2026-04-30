@@ -94,13 +94,6 @@ async function syncPaymentEvent(params: {
     return
   }
 
-  if (event.type === 'payment_failed') {
-    await subscriptionRepo.updateByExternalId(event.externalSubscriptionId, {
-      metadata,
-    })
-    return
-  }
-
   await subscriptionRepo.updateByExternalId(event.externalSubscriptionId, {
     status: nextStatus,
     endDate: shouldSetEndDate(event.type) ? extractEndDate(rawPayload) ?? new Date() : undefined,
@@ -153,7 +146,7 @@ function mapSubscriptionStatus(eventType: NonNullable<ReturnType<PaymentPort['pa
     case 'subscription_cancelled':
       return 'cancelled' as const
     case 'payment_failed':
-      return 'pending' as const
+      return 'payment_failed' as const
   }
 }
 

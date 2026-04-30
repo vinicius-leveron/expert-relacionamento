@@ -7,6 +7,8 @@ import {
   StyleSheet,
   Animated,
   Platform,
+  type NativeSyntheticEvent,
+  type TextInputKeyPressEventData,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import type { ChatAttachment } from '@/stores/chat.store';
@@ -103,6 +105,27 @@ export function MessageInput({
     !isUploadingAttachment &&
     !hasPendingUpload;
 
+  const handleKeyPress = (
+    event: NativeSyntheticEvent<TextInputKeyPressEventData> & {
+      preventDefault?: () => void;
+    },
+  ) => {
+    if (Platform.OS !== 'web') {
+      return;
+    }
+
+    const nativeEvent = event.nativeEvent as TextInputKeyPressEventData & {
+      shiftKey?: boolean;
+    };
+
+    if (nativeEvent.key !== 'Enter' || nativeEvent.shiftKey) {
+      return;
+    }
+
+    event.preventDefault?.();
+    void handleSend();
+  };
+
   return (
     <View style={styles.wrapper}>
       {attachments.length > 0 && (
@@ -180,8 +203,9 @@ export function MessageInput({
             multiline
             maxLength={1000}
             editable={!disabled}
-            returnKeyType="default"
+            returnKeyType={Platform.OS === 'web' ? 'send' : 'default'}
             blurOnSubmit={false}
+            onKeyPress={handleKeyPress}
           />
         </View>
 

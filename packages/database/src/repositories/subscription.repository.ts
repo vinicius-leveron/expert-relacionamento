@@ -1,7 +1,12 @@
 import type { SupabaseClient } from '../client.js'
 import type { Json } from '../types.js'
 
-export type SubscriptionStatus = 'active' | 'cancelled' | 'expired' | 'pending'
+export type SubscriptionStatus =
+  | 'active'
+  | 'cancelled'
+  | 'expired'
+  | 'pending'
+  | 'payment_failed'
 
 export interface Subscription {
   id: string
@@ -22,6 +27,11 @@ export interface SubscriptionRepository {
    * Busca assinatura ativa do usuário
    */
   getActiveByUserId(userId: string): Promise<Subscription | null>
+
+  /**
+   * Busca a assinatura mais recente do usuário, independentemente de status
+   */
+  getLatestByUserId(userId: string): Promise<Subscription | null>
 
   /**
    * Busca assinatura por ID externo (do gateway de pagamento)
@@ -74,6 +84,20 @@ export class SupabaseSubscriptionRepository implements SubscriptionRepository {
       .eq('user_id', userId)
       .eq('status', 'active')
       .order('created_at', { ascending: false })
+      .limit(1)
+      .single()
+
+    if (error || !data) return null
+
+    return this.mapSubscription(data)
+  }
+
+  async getLatestByUserId(userId: string): Promise<Subscription | null> {
+    const { data, error } = await this.supabase
+      .from('subscriptions')
+      .select('*')
+      .eq('user_id', userId)
+      .order('updated_at', { ascending: false })
       .limit(1)
       .single()
 

@@ -1,9 +1,10 @@
 import { randomUUID } from 'node:crypto'
 import { extname } from 'node:path'
-import { Hono } from 'hono'
+import { Hono, type Context } from 'hono'
 import type {
   JwtService,
   MagicLinkService,
+  User,
   UserRepository,
   VerificationCodeService,
 } from '@perpetuo/core'
@@ -29,6 +30,7 @@ const MAX_ATTACHMENT_SIZE_BYTES = 10 * 1024 * 1024
 const MAX_ATTACHMENTS_PER_MESSAGE = 5
 const MAX_INLINE_IMAGE_SIZE_BYTES = 5 * 1024 * 1024
 const MAX_INLINE_AUDIO_SIZE_BYTES = 10 * 1024 * 1024
+const MAX_PROFILE_AVATAR_SIZE_BYTES = 3 * 1024 * 1024
 const SUPPORTED_ATTACHMENT_MIME_TYPES = new Set([
   'application/pdf',
   'text/plain',
@@ -153,7 +155,14 @@ export interface ApiRoutesConfig {
   messageEmitter?: MessageEmitter
   appPipeline?: MessagePipeline
   paymentUrl?: string
+  nativeCheckoutMode?: 'external_link' | 'blocked'
   logger: Logger
+}
+
+function normalizeNativeCheckoutMode(
+  value: string | undefined,
+): 'external_link' | 'blocked' {
+  return value === 'blocked' ? 'blocked' : 'external_link'
 }
 
 export function createApiRoutes(config: ApiRoutesConfig) {
@@ -171,8 +180,10 @@ export function createApiRoutes(config: ApiRoutesConfig) {
     messageEmitter,
     appPipeline,
     paymentUrl,
+    nativeCheckoutMode: configuredNativeCheckoutMode,
     logger,
   } = config
+  const nativeCheckoutMode = normalizeNativeCheckoutMode(configuredNativeCheckoutMode)
 
   const app = new Hono()
 
@@ -203,6 +214,81 @@ export function createApiRoutes(config: ApiRoutesConfig) {
 
   // Protected routes - require authentication
   const authMiddleware = createAuthMiddleware({ jwtService })
+  const requireActiveSubscription = async (userId: string) => {
+    if (!subscriptionRepo) {
+      return null
+    }
+
+    const hasActiveSubscription = await subscriptionRepo.isActive(userId)
+    if (hasActiveSubscription) {
+      return null
+    }
+
+    return {
+      success: false as const,
+      error: {
+        code: 'SUBSCRIPTION_REQUIRED',
+        message: 'Ative sua assinatura para usar este recurso.',
+      },
+    }
+  }
+
+  const buildProfileResponse = async (userId: string, user: User) => {
+    const diagnostic = diagnosticRepo ? await diagnosticRepo.getByUserId(userId) : null
+    const subscription = subscriptionRepo ? await subscriptionRepo.getLatestByUserId(userId) : null
+    const diagnosisCompleted = diagnostic !== null
+    const hasActiveSubscription = subscription?.status === 'active'
+    const subscriptionCheckEnabled = subscriptionRepo !== undefined
+    const hasChatAccess = !subscriptionCheckEnabled || hasActiveSubscription
+    const hasJourneyAccess = diagnosisCompleted && hasChatAccess
+    const canAnalyzeImages = hasChatAccess
+
+    let avatarUrl: string | null = null
+    if (user.avatarStoragePath && attachmentStorage) {
+      try {
+        avatarUrl = await attachmentStorage.createSignedReadUrl(user.avatarStoragePath)
+      } catch (error) {
+        logger.warn(
+          { error, userId, avatarStoragePath: user.avatarStoragePath },
+          'Failed to create signed avatar URL',
+        )
+      }
+    }
+
+    return {
+      id: user.id,
+      email: user.email,
+      phone: user.phoneE164,
+      displayName: user.displayName,
+      avatarUrl,
+      createdAt: user.createdAt.toISOString(),
+      diagnostic: diagnostic
+        ? {
+            archetype: diagnostic.archetype,
+            completedAt: diagnostic.completedAt,
+          }
+        : null,
+      subscription: subscription
+        ? {
+            status: subscription.status,
+            planId: subscription.planId,
+            endDate: subscription.endDate,
+          }
+        : null,
+      access: {
+        diagnosisCompleted,
+        hasActiveSubscription,
+        hasChatAccess,
+        hasJourneyAccess,
+        canAnalyzeImages,
+      },
+      commerce: {
+        checkoutUrl: paymentUrl ?? null,
+        nativeCheckoutMode,
+        canUpgrade: Boolean(paymentUrl) && (!subscriptionCheckEnabled || !hasActiveSubscription),
+      },
+    }
+  }
 
   // Profile routes
   app.get('/profile', authMiddleware, async (c) => {
@@ -217,48 +303,9 @@ export function createApiRoutes(config: ApiRoutesConfig) {
         )
       }
 
-      // Get additional data
-      const diagnostic = diagnosticRepo ? await diagnosticRepo.getByUserId(userId) : null
-      const subscription = subscriptionRepo ? await subscriptionRepo.getActiveByUserId(userId) : null
-      const diagnosisCompleted = diagnostic !== null
-      const hasActiveSubscription = subscription?.status === 'active'
-      const subscriptionCheckEnabled = subscriptionRepo !== undefined
-      const hasJourneyAccess =
-        diagnosisCompleted && (!subscriptionCheckEnabled || hasActiveSubscription)
-      const canAnalyzeImages =
-        !diagnosisCompleted || !subscriptionCheckEnabled || hasActiveSubscription
-
       return c.json({
         success: true,
-        data: {
-          id: user.id,
-          email: user.email,
-          phone: user.phoneE164,
-          createdAt: user.createdAt.toISOString(),
-          diagnostic: diagnostic
-            ? {
-                archetype: diagnostic.archetype,
-                completedAt: diagnostic.completedAt,
-              }
-            : null,
-          subscription: subscription
-            ? {
-                status: subscription.status,
-                planId: subscription.planId,
-                endDate: subscription.endDate,
-              }
-            : null,
-          access: {
-            diagnosisCompleted,
-            hasActiveSubscription,
-            hasJourneyAccess,
-            canAnalyzeImages,
-          },
-          commerce: {
-            checkoutUrl: paymentUrl ?? null,
-            canUpgrade: Boolean(paymentUrl) && (!subscriptionCheckEnabled || !hasActiveSubscription),
-          },
-        },
+        data: await buildProfileResponse(userId, user),
       })
     } catch (error) {
       logger.error({ error, userId }, 'Failed to get profile')
@@ -268,6 +315,224 @@ export function createApiRoutes(config: ApiRoutesConfig) {
       )
     }
   })
+
+  const updateProfileHandler = async (c: Context) => {
+    const userId = c.get('userId')
+
+    try {
+      const user = await userRepo.findById(userId)
+      if (!user) {
+        return c.json(
+          { success: false, error: { code: 'NOT_FOUND', message: 'User not found' } },
+          404,
+        )
+      }
+
+      const body = await c.req.json<{
+        displayName?: string | null
+        avatar?:
+          | {
+              data?: string
+              mediaType?: string
+            }
+          | null
+      }>()
+
+      let normalizedDisplayName: string | null | undefined
+      if (body.displayName !== undefined) {
+        if (body.displayName !== null && typeof body.displayName !== 'string') {
+          return c.json(
+            {
+              success: false,
+              error: { code: 'VALIDATION_ERROR', message: 'displayName must be a string or null' },
+            },
+            400,
+          )
+        }
+
+        const trimmedDisplayName = body.displayName?.trim() ?? ''
+        if (trimmedDisplayName.length > 120) {
+          return c.json(
+            {
+              success: false,
+              error: {
+                code: 'VALIDATION_ERROR',
+                message: 'displayName must be at most 120 characters',
+              },
+            },
+            400,
+          )
+        }
+
+        normalizedDisplayName = trimmedDisplayName.length > 0 ? trimmedDisplayName : null
+      }
+
+      let nextAvatarStoragePath: string | null | undefined
+      let uploadedAvatarStoragePath: string | undefined
+      const currentAvatarStoragePath = user.avatarStoragePath
+
+      if (body.avatar !== undefined) {
+        if (body.avatar !== null && typeof body.avatar !== 'object') {
+          return c.json(
+            {
+              success: false,
+              error: { code: 'VALIDATION_ERROR', message: 'avatar must be an object or null' },
+            },
+            400,
+          )
+        }
+
+        if (body.avatar === null) {
+          nextAvatarStoragePath = null
+        } else {
+          if (!attachmentStorage) {
+            return c.json(
+              {
+                success: false,
+                error: { code: 'NOT_CONFIGURED', message: 'Avatar upload is not configured' },
+              },
+              503,
+            )
+          }
+
+          if (!body.avatar.data || typeof body.avatar.data !== 'string') {
+            return c.json(
+              {
+                success: false,
+                error: { code: 'VALIDATION_ERROR', message: 'avatar.data is required' },
+              },
+              400,
+            )
+          }
+
+          if (!body.avatar.mediaType || typeof body.avatar.mediaType !== 'string') {
+            return c.json(
+              {
+                success: false,
+                error: { code: 'VALIDATION_ERROR', message: 'avatar.mediaType is required' },
+              },
+              400,
+            )
+          }
+
+          const normalizedAvatarData = parseInlineMediaData(body.avatar.data)
+          const normalizedAvatarMediaType = body.avatar.mediaType.trim().toLowerCase()
+
+          if (
+            normalizedAvatarData.mediaTypeFromDataUrl &&
+            normalizedAvatarData.mediaTypeFromDataUrl !== normalizedAvatarMediaType
+          ) {
+            return c.json(
+              {
+                success: false,
+                error: {
+                  code: 'VALIDATION_ERROR',
+                  message: 'avatar.mediaType does not match the data URI media type',
+                },
+              },
+              400,
+            )
+          }
+
+          if (!SUPPORTED_INLINE_IMAGE_MIME_TYPES.has(normalizedAvatarMediaType)) {
+            return c.json(
+              {
+                success: false,
+                error: {
+                  code: 'VALIDATION_ERROR',
+                  message: 'Unsupported avatar type. Allowed: image/jpeg, image/png, image/webp',
+                },
+              },
+              400,
+            )
+          }
+
+          if (
+            !normalizedAvatarData.base64 ||
+            estimateBase64SizeInBytes(normalizedAvatarData.base64) > MAX_PROFILE_AVATAR_SIZE_BYTES
+          ) {
+            return c.json(
+              {
+                success: false,
+                error: {
+                  code: 'VALIDATION_ERROR',
+                  message: `Avatar exceeds the ${MAX_PROFILE_AVATAR_SIZE_BYTES} bytes limit`,
+                },
+              },
+              400,
+            )
+          }
+
+          if (!isValidBase64String(normalizedAvatarData.base64)) {
+            return c.json(
+              {
+                success: false,
+                error: {
+                  code: 'VALIDATION_ERROR',
+                  message: 'avatar.data must be valid base64 content',
+                },
+              },
+              400,
+            )
+          }
+
+          const extension = getImageExtension(
+            normalizedAvatarMediaType as 'image/jpeg' | 'image/png' | 'image/webp',
+          )
+          uploadedAvatarStoragePath = `users/${userId}/profile/avatar-${randomUUID()}${extension}`
+
+          await attachmentStorage.uploadBuffer({
+            path: uploadedAvatarStoragePath,
+            data: Buffer.from(normalizedAvatarData.base64, 'base64'),
+            contentType: normalizedAvatarMediaType,
+          })
+
+          nextAvatarStoragePath = uploadedAvatarStoragePath
+        }
+      }
+
+      const updatedUser = user.withProfile({
+        displayName: normalizedDisplayName,
+        avatarStoragePath: nextAvatarStoragePath,
+      })
+
+      try {
+        await userRepo.save(updatedUser)
+      } catch (error) {
+        if (uploadedAvatarStoragePath && attachmentStorage) {
+          await attachmentStorage.removeObject(uploadedAvatarStoragePath).catch(() => {})
+        }
+        throw error
+      }
+
+      if (
+        currentAvatarStoragePath &&
+        currentAvatarStoragePath !== updatedUser.avatarStoragePath &&
+        attachmentStorage
+      ) {
+        await attachmentStorage.removeObject(currentAvatarStoragePath).catch((error) => {
+          logger.warn(
+            { error, userId, currentAvatarStoragePath },
+            'Failed to remove previous avatar object',
+          )
+        })
+      }
+
+      return c.json({
+        success: true,
+        data: await buildProfileResponse(userId, updatedUser),
+      })
+    } catch (error) {
+      logger.error({ error, userId }, 'Failed to update profile')
+      return c.json(
+        { success: false, error: { code: 'INTERNAL_ERROR', message: 'Failed to update profile' } },
+        500,
+      )
+    }
+  }
+
+  app.patch('/profile', authMiddleware, updateProfileHandler)
+  app.put('/profile', authMiddleware, updateProfileHandler)
 
   // Conversations routes
   app.get('/conversations', authMiddleware, async (c) => {
@@ -450,6 +715,11 @@ export function createApiRoutes(config: ApiRoutesConfig) {
         { success: false, error: { code: 'NOT_CONFIGURED', message: 'Chat not configured' } },
         503
       )
+    }
+
+    const subscriptionGate = await requireActiveSubscription(userId)
+    if (subscriptionGate) {
+      return c.json(subscriptionGate, 402)
     }
 
     try {
@@ -992,6 +1262,11 @@ export function createApiRoutes(config: ApiRoutesConfig) {
       )
     }
 
+    const subscriptionGate = await requireActiveSubscription(userId)
+    if (subscriptionGate) {
+      return c.json(subscriptionGate, 402)
+    }
+
     try {
       const conversation = await conversationRepo.findById(conversationId)
       if (!conversation || conversation.userId !== userId) {
@@ -1116,6 +1391,11 @@ export function createApiRoutes(config: ApiRoutesConfig) {
         },
         503
       )
+    }
+
+    const subscriptionGate = await requireActiveSubscription(userId)
+    if (subscriptionGate) {
+      return c.json(subscriptionGate, 402)
     }
 
     try {

@@ -338,6 +338,10 @@ class StubSubscriptionRepo implements SubscriptionRepository {
     return null
   }
 
+  async getLatestByUserId(): Promise<Subscription | null> {
+    return null
+  }
+
   async getByExternalId(): Promise<Subscription | null> {
     return null
   }

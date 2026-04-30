@@ -117,7 +117,16 @@ export const useAuthStore = create<AuthState>((set, get) => ({
         message: string;
         devLink?: string;
       };
+      error?: {
+        message?: string;
+      };
     }>('/auth/magic-link', { email });
+
+    if (response.status >= 400 || !response.data.success) {
+      throw new Error(
+        response.data.error?.message ?? 'Não consegui enviar seu link de acesso.',
+      );
+    }
 
     // Em dev, retorna o link para redirect automático
     return response.data.data.devLink;
@@ -131,10 +140,13 @@ export const useAuthStore = create<AuthState>((set, get) => ({
         refreshToken: string;
         user: User;
       };
+      error?: {
+        message?: string;
+      };
     }>('/auth/verify', { token });
 
-    if (!response.data.success) {
-      throw new Error('Verification failed');
+    if (response.status >= 400 || !response.data.success) {
+      throw new Error(response.data.error?.message ?? 'Verification failed');
     }
 
     const { accessToken, refreshToken, user } = response.data.data;

@@ -10,6 +10,8 @@ describe('User Entity', () => {
       expect(user.id).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i)
       expect(user.phoneE164).toBe('+5511999999999')
       expect(user.email).toBeNull()
+      expect(user.displayName).toBeNull()
+      expect(user.avatarStoragePath).toBeNull()
       expect(user.createdAt).toBeInstanceOf(Date)
       expect(user.updatedAt).toBeInstanceOf(Date)
     })
@@ -61,6 +63,8 @@ describe('User Entity', () => {
         id: '123e4567-e89b-12d3-a456-426614174000',
         phoneE164: '+5511999999999',
         email: 'test@example.com',
+        displayName: 'Teste',
+        avatarStoragePath: 'users/u1/profile/avatar.png',
         createdAt: new Date('2024-01-01'),
         updatedAt: new Date('2024-01-02'),
       }
@@ -70,6 +74,8 @@ describe('User Entity', () => {
       expect(user.id).toBe(props.id)
       expect(user.phoneE164).toBe(props.phoneE164)
       expect(user.email).toBe(props.email)
+      expect(user.displayName).toBe(props.displayName)
+      expect(user.avatarStoragePath).toBe(props.avatarStoragePath)
       expect(user.createdAt).toEqual(props.createdAt)
       expect(user.updatedAt).toEqual(props.updatedAt)
     })
@@ -87,8 +93,25 @@ describe('User Entity', () => {
       expect(props.id).toBe(user.id)
       expect(props.phoneE164).toBe(user.phoneE164)
       expect(props.email).toBe(user.email)
+      expect(props.displayName).toBe(user.displayName)
+      expect(props.avatarStoragePath).toBe(user.avatarStoragePath)
       expect(props.createdAt).toBe(user.createdAt)
       expect(props.updatedAt).toBe(user.updatedAt)
+    })
+  })
+
+  describe('withProfile', () => {
+    it('should return a new user with updated display name and avatar', () => {
+      const user = User.create({ email: 'test@example.com' })
+      const updated = user.withProfile({
+        displayName: 'Vinicius',
+        avatarStoragePath: 'users/u1/profile/avatar.png',
+      })
+
+      expect(updated.id).toBe(user.id)
+      expect(updated.displayName).toBe('Vinicius')
+      expect(updated.avatarStoragePath).toBe('users/u1/profile/avatar.png')
+      expect(updated.updatedAt.getTime()).toBeGreaterThanOrEqual(user.updatedAt.getTime())
     })
   })
 })

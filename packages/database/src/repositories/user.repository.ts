@@ -19,6 +19,8 @@ export class SupabaseUserRepository implements UserRepository {
       id: data.id,
       phoneE164: data.phone_e164,
       email: data.email,
+      displayName: data.display_name,
+      avatarStoragePath: data.avatar_storage_path,
       createdAt: new Date(data.created_at),
       updatedAt: new Date(data.updated_at),
     })
@@ -39,6 +41,8 @@ export class SupabaseUserRepository implements UserRepository {
       id: data.id,
       phoneE164: data.phone_e164,
       email: data.email,
+      displayName: data.display_name,
+      avatarStoragePath: data.avatar_storage_path,
       createdAt: new Date(data.created_at),
       updatedAt: new Date(data.updated_at),
     })
@@ -59,6 +63,8 @@ export class SupabaseUserRepository implements UserRepository {
       id: data.id,
       phoneE164: data.phone_e164,
       email: data.email,
+      displayName: data.display_name,
+      avatarStoragePath: data.avatar_storage_path,
       createdAt: new Date(data.created_at),
       updatedAt: new Date(data.updated_at),
     })
@@ -71,6 +77,8 @@ export class SupabaseUserRepository implements UserRepository {
       id: props.id,
       phone_e164: props.phoneE164,
       email: props.email,
+      display_name: props.displayName,
+      avatar_storage_path: props.avatarStoragePath,
       created_at: props.createdAt.toISOString(),
       updated_at: props.updatedAt.toISOString(),
     })

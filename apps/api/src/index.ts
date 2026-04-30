@@ -17,11 +17,15 @@ import { MessagePipeline } from './pipeline/index.js'
 import { apiRateLimit, webhookRateLimit } from './middleware/index.js'
 import {
   createApiRoutes,
+  createHealthRoute,
   createPaymentWebhookRoute,
   createWhatsAppWebhookRoute,
-  healthRoute,
 } from './routes/index.js'
-import { ChatAttachmentStorageService, createEmailSender } from './services/index.js'
+import {
+  ChatAttachmentStorageService,
+  createEmailSender,
+  isEmailDeliveryConfigured,
+} from './services/index.js'
 
 // Imports condicionais para evitar erro se env vars não existirem em dev
 const createPersistence = async () => {
@@ -141,6 +145,8 @@ const WEB_APP_URL = process.env.WEB_APP_URL
 
 // App base URL para magic links
 const APP_BASE_URL = WEB_APP_URL ?? process.env.APP_BASE_URL ?? 'http://localhost:8081'
+const NATIVE_CHECKOUT_MODE =
+  process.env.NATIVE_CHECKOUT_MODE === 'blocked' ? 'blocked' : 'external_link'
 
 const allowedOrigins = new Set(
   [
@@ -201,6 +207,25 @@ async function main() {
 
   const transcriber = await createOptionalTranscriber()
   const paymentAdapter = await createPaymentAdapter()
+  const emailDeliveryConfigured = isEmailDeliveryConfigured()
+  const publicUrlsConfigured = Boolean(WEB_APP_URL?.trim() && APP_BASE_URL?.trim())
+  const paymentConfigured = Boolean(
+    process.env.PAYMENT_URL?.trim() && paymentAdapter && subscriptionRepo,
+  )
+  const storageConfigured = Boolean(attachmentRepo && attachmentStorage)
+  const aiConfigured = Boolean(
+    process.env.ANTHROPIC_API_KEY?.trim() && process.env.OPENAI_API_KEY?.trim(),
+  )
+  const healthRoute = createHealthRoute({
+    checks: {
+      database: Boolean(conversationRepo && diagnosticRepo && subscriptionRepo && userRepo),
+      email: emailDeliveryConfigured,
+      payment: paymentConfigured,
+      storage: storageConfigured,
+      ai: aiConfigured,
+      publicUrls: publicUrlsConfigured,
+    },
+  })
 
   // AI Provider (real ou mock baseado em env)
   const aiProvider = await createAIProvider()
@@ -315,6 +340,7 @@ async function main() {
         messageEmitter,
         appPipeline,
         paymentUrl: process.env.PAYMENT_URL,
+        nativeCheckoutMode: NATIVE_CHECKOUT_MODE,
         logger,
       }),
     )
