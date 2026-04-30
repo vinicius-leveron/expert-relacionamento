@@ -20,6 +20,7 @@ import { useAuthStore } from '@/stores/auth.store';
 import { useConversationsStore } from '@/stores/conversations.store';
 import {
   AudioRecorderModal,
+  AttachmentPickerModal,
   ChatBubble,
   ChatHeader,
   MessageInput,
@@ -59,6 +60,7 @@ export default function ChatScreen() {
   const [isRecordingAudio, setIsRecordingAudio] = useState(false);
   const [recordingAudioDurationSeconds, setRecordingAudioDurationSeconds] = useState(0);
   const [isAudioRecorderVisible, setIsAudioRecorderVisible] = useState(false);
+  const [isAttachmentPickerVisible, setIsAttachmentPickerVisible] = useState(false);
   const [audioCaptionDraft, setAudioCaptionDraft] = useState('');
   const [recordedAudioDraft, setRecordedAudioDraft] =
     useState<RecordedAudioDraft | null>(null);
@@ -378,6 +380,43 @@ export default function ChatScreen() {
     setIsAudioRecorderVisible(true);
   };
 
+  const handleOpenAttachmentPicker = (
+    draftText: string,
+    clearDraft: () => void,
+  ) => {
+    audioDraftClearRef.current = clearDraft;
+    setAudioCaptionDraft(draftText);
+    setIsAttachmentPickerVisible(true);
+  };
+
+  const handleCloseAttachmentPicker = () => {
+    setIsAttachmentPickerVisible(false);
+  };
+
+  const handleSelectAttachmentOption = async (
+    option: 'image' | 'file' | 'audio',
+  ) => {
+    setIsAttachmentPickerVisible(false);
+
+    if (option === 'image') {
+      await handlePickImage(
+        audioCaptionDraft,
+        audioDraftClearRef.current ?? (() => {}),
+      );
+      return;
+    }
+
+    if (option === 'file') {
+      await handlePickDocument();
+      return;
+    }
+
+    handleOpenAudioRecorder(
+      audioCaptionDraft,
+      audioDraftClearRef.current ?? (() => {}),
+    );
+  };
+
   const handleDiscardRecordedAudio = async () => {
     if (recordedAudioDraft) {
       await cleanupLocalAudioFile(recordedAudioDraft.uri);
@@ -463,30 +502,7 @@ export default function ChatScreen() {
   };
 
   const handlePickAttachment = async (draftText: string, clearDraft: () => void) => {
-    Alert.alert('Anexar no chat', 'Escolha o tipo de envio', [
-      {
-        text: 'Imagem',
-        onPress: () => {
-          void handlePickImage(draftText, clearDraft);
-        },
-      },
-      {
-        text: 'Arquivo',
-        onPress: () => {
-          void handlePickDocument();
-        },
-      },
-      {
-        text: 'Áudio',
-        onPress: () => {
-          handleOpenAudioRecorder(draftText, clearDraft);
-        },
-      },
-      {
-        text: 'Cancelar',
-        style: 'cancel',
-      },
-    ]);
+    handleOpenAttachmentPicker(draftText, clearDraft);
   };
 
   const renderMessage = ({ item, index }: { item: Message; index: number }) => {
@@ -569,6 +585,12 @@ export default function ChatScreen() {
           attachments={pendingAttachments}
           disabled={isLoading}
           isUploadingAttachment={isUploadingAttachment}
+        />
+
+        <AttachmentPickerModal
+          visible={isAttachmentPickerVisible}
+          onClose={handleCloseAttachmentPicker}
+          onSelect={handleSelectAttachmentOption}
         />
 
         <AudioRecorderModal

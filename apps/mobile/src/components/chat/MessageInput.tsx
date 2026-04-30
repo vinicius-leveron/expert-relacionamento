@@ -153,14 +153,14 @@ export function MessageInput({
           onPress={() => {
             void onPickAttachment(text.trim(), () => setText(''));
           }}
-          disabled={disabled || isUploadingAttachment}
+          disabled={isUploadingAttachment}
           activeOpacity={0.7}
         >
           <Ionicons
             name="attach"
             size={sizes.iconMd}
             color={
-              disabled || isUploadingAttachment
+              isUploadingAttachment
                 ? colors.textMuted
                 : colors.primary
             }
@@ -187,14 +187,14 @@ export function MessageInput({
           onPress={() => {
             void onOpenAudioRecorder(text.trim(), () => setText(''));
           }}
-          disabled={disabled || isUploadingAttachment}
+          disabled={isUploadingAttachment}
           activeOpacity={0.7}
         >
           <Ionicons
             name="mic"
             size={sizes.iconMd}
             color={
-              disabled || isUploadingAttachment
+              isUploadingAttachment
                 ? colors.textMuted
                 : colors.primary
             }

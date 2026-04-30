@@ -4,18 +4,9 @@
   "private": true,
   "type": "module",
   "exports": {
-    ".": {
-      "types": "./dist/index.d.ts",
-      "default": "./dist/index.js"
-    },
-    "./ports": {
-      "types": "./dist/ports/index.d.ts",
-      "default": "./dist/ports/index.js"
-    },
-    "./domain": {
-      "types": "./dist/domain/index.d.ts",
-      "default": "./dist/domain/index.js"
-    }
+    ".": "./src/index.ts",
+    "./ports": "./src/ports/index.ts",
+    "./domain": "./src/domain/index.ts"
   },
   "scripts": {
     "build": "tsc",

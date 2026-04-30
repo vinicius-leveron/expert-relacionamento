@@ -4,8 +4,8 @@ services:
     runtime: node
     region: oregon
     plan: free
-    buildCommand: corepack enable && NODE_ENV=development pnpm install --frozen-lockfile && pnpm run build:api
-    startCommand: cd apps/api && node dist/src/index.js
+    buildCommand: corepack enable && pnpm install --frozen-lockfile
+    startCommand: cd apps/api && npx tsx src/index.ts
     healthCheckPath: /health
     envVars:
       - key: NODE_VERSION

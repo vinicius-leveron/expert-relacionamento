@@ -1,6 +1,7 @@
 export { ChatBubble } from './ChatBubble';
 export { ChatHeader } from './ChatHeader';
 export { MessageInput } from './MessageInput';
+export { AttachmentPickerModal } from './AttachmentPickerModal';
 export { AudioRecorderModal } from './AudioRecorderModal';
 export type { RecordedAudioDraft } from './AudioRecorderModal';
 export { QuickReplies } from './QuickReplies';

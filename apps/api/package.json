@@ -20,11 +20,11 @@
     "@perpetuo/whatsapp-adapter": "workspace:*",
     "hono": "^4.5.0",
     "pino": "^9.3.0",
-    "pino-pretty": "^11.2.0"
+    "pino-pretty": "^11.2.0",
+    "tsx": "^4.16.0"
   },
   "devDependencies": {
     "dotenv": "^17.4.2",
-    "tsx": "^4.16.0",
     "vitest": "^2.0.0"
   }
 }
