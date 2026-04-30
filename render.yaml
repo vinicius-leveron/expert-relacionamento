@@ -4,7 +4,7 @@ services:
     runtime: node
     region: oregon
     plan: free
-    buildCommand: corepack enable && NODE_ENV=development pnpm install --frozen-lockfile && pnpm build
+    buildCommand: corepack enable && NODE_ENV=development pnpm install --frozen-lockfile && pnpm turbo run build --filter=@perpetuo/api...
     startCommand: cd apps/api && node dist/src/index.js
     healthCheckPath: /health
     envVars:
