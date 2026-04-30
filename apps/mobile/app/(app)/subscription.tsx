@@ -15,6 +15,9 @@ import { useProfileStore } from '@/stores/profile.store';
 import { colors, spacing, typography, radius, getShadow } from '@/theme';
 import { openCheckoutUrl } from '@/utils/checkout';
 import { captureAnalyticsEvent } from '@/analytics/posthog';
+import { TestimonialCard } from '@/components/ui';
+import { getPaywallContent, type Archetype } from '@/data/prompts-by-archetype';
+import { getTestimonialForArchetype } from '@/data/testimonials';
 
 const PREMIUM_BENEFITS = [
   {
@@ -52,53 +55,64 @@ export default function SubscriptionScreen() {
   const canOpenCheckoutInCurrentClient =
     Platform.OS === 'web' || nativeCheckoutMode === 'external_link';
 
+  const archetype = profile?.diagnostic?.archetype as Archetype | undefined;
+
   useEffect(() => {
     if (hasTrackedView.current) {
       return;
     }
 
     hasTrackedView.current = true;
-    captureAnalyticsEvent('subscription_screen_viewed');
-  }, []);
+    captureAnalyticsEvent('subscription_screen_viewed', {
+      archetype: archetype ?? 'none',
+    });
+  }, [archetype]);
+
+  const paywallContent = useMemo(() => getPaywallContent(archetype), [archetype]);
+  const testimonial = useMemo(
+    () => getTestimonialForArchetype('paywall', archetype),
+    [archetype]
+  );
 
   const heading = useMemo(() => {
     if (hasActiveSubscription) {
       return {
         title: 'Acesso liberado',
         subtitle: 'Agora é usar. Manda os prints, analisa teu perfil e segue a jornada.',
+        cta: 'Ir para o chat',
       };
     }
 
     if (subscriptionStatus === 'pending') {
       return {
         title: 'Processando pagamento',
-        subtitle:
-          'Assim que confirmar, seu acesso é liberado na hora.',
+        subtitle: 'Assim que confirmar, seu acesso é liberado na hora.',
+        cta: 'Atualizar status',
       };
     }
 
     if (subscriptionStatus === 'payment_failed') {
       return {
         title: 'Pagamento falhou',
-        subtitle:
-          'Revisa a cobrança pra continuar usando tudo.',
+        subtitle: 'Revisa a cobrança pra continuar usando tudo.',
+        cta: 'Tentar novamente',
       };
     }
 
     if (subscriptionStatus === 'cancelled' || subscriptionStatus === 'expired') {
       return {
         title: 'Acesso expirou',
-        subtitle:
-          'Reativa pra voltar a analisar conversas e seguir a jornada.',
+        subtitle: 'Reativa pra voltar a analisar conversas e seguir a jornada.',
+        cta: 'Reativar acesso',
       };
     }
 
     return {
-      title: 'Para de ficar no escuro',
-      subtitle:
-        'Manda prints, analisa teu perfil e recebe direção de verdade.',
+      title: paywallContent.headline,
+      subtitle: paywallContent.subheadline,
+      cta: paywallContent.cta,
     };
-  }, [hasActiveSubscription, subscriptionStatus]);
+  }, [hasActiveSubscription, subscriptionStatus, paywallContent]);
 
   const handleOpenCheckout = async () => {
     if (isOpeningCheckout) {
@@ -109,6 +123,7 @@ export default function SubscriptionScreen() {
       setIsOpeningCheckout(true);
       captureAnalyticsEvent('subscription_checkout_clicked', {
         has_active_subscription: hasActiveSubscription,
+        archetype: archetype ?? 'none',
       });
       await openCheckoutUrl(checkoutUrl);
     } finally {
@@ -153,9 +168,11 @@ export default function SubscriptionScreen() {
         </View>
 
         <View style={styles.heroCard}>
-          <View style={styles.heroIcon}>
-            <Ionicons name="diamond-outline" size={32} color={colors.primaryDark} />
-          </View>
+          {!hasActiveSubscription && (
+            <View style={styles.heroIcon}>
+              <Ionicons name="diamond-outline" size={32} color={colors.primaryDark} />
+            </View>
+          )}
           <Text style={styles.heroTitle}>{heading.title}</Text>
           <Text style={styles.heroSubtitle}>{heading.subtitle}</Text>
 
@@ -166,6 +183,12 @@ export default function SubscriptionScreen() {
             </View>
           ) : null}
         </View>
+
+        {!hasActiveSubscription && (
+          <View style={styles.testimonialSection}>
+            <TestimonialCard testimonial={testimonial} compact />
+          </View>
+        )}
 
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>O que você ganha</Text>
@@ -230,10 +253,7 @@ export default function SubscriptionScreen() {
                 {isOpeningCheckout ? (
                   <ActivityIndicator color={colors.white} />
                 ) : (
-                  <>
-                    <Text style={styles.primaryButtonText}>Assinar agora</Text>
-                    <Ionicons name="open-outline" size={18} color={colors.white} />
-                  </>
+                  <Text style={styles.primaryButtonText}>{heading.cta}</Text>
                 )}
               </TouchableOpacity>
             ) : null}
@@ -272,16 +292,16 @@ const styles = StyleSheet.create({
     width: 40,
     height: 40,
     borderRadius: 20,
-    backgroundColor: colors.white,
+    backgroundColor: colors.surface,
     alignItems: 'center',
     justifyContent: 'center',
     ...getShadow('sm'),
   },
   heroCard: {
-    backgroundColor: colors.white,
+    backgroundColor: colors.surface,
     borderRadius: radius.xl,
     padding: spacing.lg,
-    marginBottom: spacing.lg,
+    marginBottom: spacing.md,
     ...getShadow('md'),
   },
   heroIcon: {
@@ -321,6 +341,9 @@ const styles = StyleSheet.create({
     color: colors.successDark,
     fontFamily: 'Inter_600SemiBold',
   },
+  testimonialSection: {
+    marginBottom: spacing.lg,
+  },
   section: {
     marginBottom: spacing.lg,
   },
@@ -333,7 +356,7 @@ const styles = StyleSheet.create({
   benefitCard: {
     flexDirection: 'row',
     alignItems: 'flex-start',
-    backgroundColor: colors.white,
+    backgroundColor: colors.surface,
     borderRadius: radius.lg,
     padding: spacing.md,
     marginBottom: spacing.sm,
@@ -381,7 +404,7 @@ const styles = StyleSheet.create({
   footer: {
     padding: spacing.lg,
     gap: spacing.sm,
-    backgroundColor: colors.white,
+    backgroundColor: colors.surface,
     borderTopWidth: 1,
     borderTopColor: colors.border,
   },
@@ -409,7 +432,7 @@ const styles = StyleSheet.create({
     borderColor: colors.primary,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: colors.white,
+    backgroundColor: colors.surface,
   },
   secondaryButtonText: {
     ...typography.body,

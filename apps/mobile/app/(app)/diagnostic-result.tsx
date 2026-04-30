@@ -224,7 +224,7 @@ export default function DiagnosticResultScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: colors.white,
+    backgroundColor: colors.surface,
   },
   scrollContent: {
     paddingHorizontal: spacing.lg,
@@ -346,7 +346,7 @@ const styles = StyleSheet.create({
   },
   footer: {
     padding: spacing.lg,
-    backgroundColor: colors.white,
+    backgroundColor: colors.surface,
     borderTopWidth: 1,
     borderTopColor: colors.border,
   },

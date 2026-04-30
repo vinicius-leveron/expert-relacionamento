@@ -188,7 +188,7 @@ export function ConversationDrawer({ navigation }: DrawerContentComponentProps) 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: colors.white,
+    backgroundColor: colors.surface,
   },
   header: {
     flexDirection: 'row',

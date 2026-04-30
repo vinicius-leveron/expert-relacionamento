@@ -60,7 +60,7 @@ export function DayCard({
 
 const styles = StyleSheet.create({
   container: {
-    backgroundColor: colors.white,
+    backgroundColor: colors.surface,
     borderRadius: radius.lg,
     padding: spacing.lg,
     marginHorizontal: spacing.lg,

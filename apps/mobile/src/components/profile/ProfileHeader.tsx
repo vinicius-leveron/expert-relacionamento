@@ -103,7 +103,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.lg,
     paddingTop: spacing.xl,
     paddingBottom: spacing.lg,
-    backgroundColor: colors.white,
+    backgroundColor: colors.surface,
   },
   settingsButton: {
     position: 'absolute',
@@ -173,7 +173,7 @@ const styles = StyleSheet.create({
     borderRadius: radius.full,
     borderWidth: 1,
     borderColor: colors.gray200,
-    backgroundColor: colors.white,
+    backgroundColor: colors.surface,
   },
   editButtonText: {
     ...typography.bodySmall,

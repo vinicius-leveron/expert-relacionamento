@@ -571,7 +571,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   userAudioIcon: {
-    backgroundColor: colors.white,
+    backgroundColor: colors.surface,
   },
   assistantAudioIcon: {
     backgroundColor: colors.primary,

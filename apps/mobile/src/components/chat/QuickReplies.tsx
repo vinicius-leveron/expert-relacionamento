@@ -1,20 +1,18 @@
+import { useMemo } from 'react';
 import { View, TouchableOpacity, Text, StyleSheet, useWindowDimensions } from 'react-native';
 import { colors, spacing, radius, typography } from '@/theme';
+import { getPromptsForArchetype, type Archetype } from '@/data/prompts-by-archetype';
 
 interface QuickRepliesProps {
   onSelect: (message: string) => void | Promise<void>;
   visible?: boolean;
+  archetype?: Archetype | null;
 }
 
-const QUICK_REPLIES = [
-  'Analisa essa conversa pra mim',
-  'Onde eu tô errando no meu perfil?',
-  'Ela parou de responder, o que faço?',
-  'Quero melhorar minha comunicação',
-];
-
-export function QuickReplies({ onSelect, visible = true }: QuickRepliesProps) {
+export function QuickReplies({ onSelect, visible = true, archetype }: QuickRepliesProps) {
   const { width } = useWindowDimensions();
+
+  const prompts = useMemo(() => getPromptsForArchetype(archetype), [archetype]);
 
   if (!visible) return null;
 
@@ -24,7 +22,7 @@ export function QuickReplies({ onSelect, visible = true }: QuickRepliesProps) {
 
   return (
     <View style={styles.container}>
-      {QUICK_REPLIES.map((reply, index) => (
+      {prompts.map((reply, index) => (
         <TouchableOpacity
           key={index}
           style={[styles.chip, { width: chipWidth }]}
@@ -49,7 +47,7 @@ const styles = StyleSheet.create({
     gap: spacing.sm,
   },
   chip: {
-    backgroundColor: colors.white,
+    backgroundColor: colors.surface,
     borderRadius: radius.md,
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.sm + 4,

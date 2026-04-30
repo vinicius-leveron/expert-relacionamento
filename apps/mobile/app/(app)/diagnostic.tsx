@@ -241,7 +241,7 @@ const styles = StyleSheet.create({
     paddingBottom: spacing.lg,
   },
   introHero: {
-    backgroundColor: colors.white,
+    backgroundColor: colors.surface,
     borderRadius: radius.lg,
     padding: spacing.lg,
     ...getShadow('md'),
@@ -285,7 +285,7 @@ const styles = StyleSheet.create({
     gap: spacing.sm,
   },
   benefitCard: {
-    backgroundColor: colors.white,
+    backgroundColor: colors.surface,
     borderRadius: radius.md,
     padding: spacing.md,
     borderWidth: 1,
@@ -309,7 +309,7 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.sm,
-    backgroundColor: colors.white,
+    backgroundColor: colors.surface,
     borderBottomWidth: 1,
     borderBottomColor: colors.border,
   },
@@ -326,7 +326,7 @@ const styles = StyleSheet.create({
   },
   footer: {
     padding: spacing.lg,
-    backgroundColor: colors.white,
+    backgroundColor: colors.surface,
     borderTopWidth: 1,
     borderTopColor: colors.border,
   },

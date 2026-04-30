@@ -182,7 +182,7 @@ export default function EditProfileScreen() {
         options={{
           title: 'Editar Perfil',
           headerShown: true,
-          headerStyle: { backgroundColor: colors.white },
+          headerStyle: { backgroundColor: colors.surface },
           headerTitleStyle: {
             ...typography.h3,
             fontFamily: 'Inter_600SemiBold',
@@ -332,7 +332,7 @@ const styles = StyleSheet.create({
   avatarSection: {
     alignItems: 'center',
     paddingVertical: spacing.xl,
-    backgroundColor: colors.white,
+    backgroundColor: colors.surface,
   },
   avatarContainer: {
     position: 'relative',
@@ -382,7 +382,7 @@ const styles = StyleSheet.create({
     fontFamily: 'Inter_500Medium',
   },
   formSection: {
-    backgroundColor: colors.white,
+    backgroundColor: colors.surface,
     marginTop: spacing.md,
     padding: spacing.lg,
   },

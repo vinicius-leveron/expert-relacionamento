@@ -126,7 +126,7 @@ export default function SettingsScreen() {
         options={{
           title: 'Configurações',
           headerShown: true,
-          headerStyle: { backgroundColor: colors.white },
+          headerStyle: { backgroundColor: colors.surface },
           headerTitleStyle: {
             ...typography.h3,
             fontFamily: 'Inter_600SemiBold',
@@ -280,7 +280,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     gap: spacing.sm,
-    backgroundColor: colors.white,
+    backgroundColor: colors.surface,
     paddingVertical: spacing.md,
     borderRadius: radius.lg,
     ...getShadow('sm'),

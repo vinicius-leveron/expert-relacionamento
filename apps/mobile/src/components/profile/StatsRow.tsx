@@ -48,7 +48,7 @@ const styles = StyleSheet.create({
     gap: spacing.sm,
   },
   statCard: {
-    backgroundColor: colors.white,
+    backgroundColor: colors.surface,
     borderRadius: radius.lg,
     padding: spacing.md,
     alignItems: 'center',

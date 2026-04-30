@@ -174,7 +174,7 @@ const styles = StyleSheet.create({
     width: sizes.avatarXl,
     height: sizes.avatarXl,
     borderRadius: sizes.avatarXl / 2,
-    backgroundColor: colors.white,
+    backgroundColor: colors.surface,
     justifyContent: 'center',
     alignItems: 'center',
     marginBottom: spacing.lg,
@@ -229,7 +229,7 @@ const styles = StyleSheet.create({
     borderColor: colors.primary,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: colors.white,
+    backgroundColor: colors.surface,
   },
   secondaryButtonText: {
     ...typography.bodySmall,
@@ -282,7 +282,7 @@ const styles = StyleSheet.create({
     width: 40,
     height: 40,
     borderRadius: 20,
-    backgroundColor: colors.white,
+    backgroundColor: colors.surface,
     justifyContent: 'center',
     alignItems: 'center',
     borderWidth: 1,
@@ -295,7 +295,7 @@ const styles = StyleSheet.create({
   dayCurrent: {
     borderWidth: 2,
     borderColor: colors.primary,
-    backgroundColor: colors.white,
+    backgroundColor: colors.surface,
   },
   dayText: {
     ...typography.bodySmall,

@@ -40,7 +40,7 @@ export function StreakCounter({ streak, bestStreak = 0 }: StreakCounterProps) {
 
 const styles = StyleSheet.create({
   container: {
-    backgroundColor: colors.white,
+    backgroundColor: colors.surface,
     borderRadius: radius.lg,
     padding: spacing.md,
     marginHorizontal: spacing.lg,

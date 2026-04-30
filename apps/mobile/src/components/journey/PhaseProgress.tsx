@@ -99,7 +99,7 @@ export function PhaseProgress({ currentDay }: PhaseProgressProps) {
 
 const styles = StyleSheet.create({
   container: {
-    backgroundColor: colors.white,
+    backgroundColor: colors.surface,
     borderRadius: radius.lg,
     padding: spacing.lg,
     marginHorizontal: spacing.lg,
@@ -140,7 +140,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.primary,
   },
   circleCurrent: {
-    backgroundColor: colors.white,
+    backgroundColor: colors.surface,
     borderWidth: 2,
     borderColor: colors.primary,
   },
