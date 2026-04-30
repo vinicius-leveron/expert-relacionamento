@@ -80,13 +80,13 @@ export function AgentsList({ onSelectAgent }: AgentsListProps) {
         style={styles.header}
         onPress={toggleExpanded}
         activeOpacity={0.7}
-        accessibilityLabel={isExpanded ? 'Recolher agentes' : 'Expandir agentes'}
+        accessibilityLabel={isExpanded ? 'Recolher mentores' : 'Expandir mentores'}
         accessibilityRole="button"
       >
         <Animated.View style={{ transform: [{ rotate: chevronRotation }] }}>
           <Ionicons name="chevron-down" size={16} color={colors.textSecondary} />
         </Animated.View>
-        <Text style={styles.headerTitle}>Agentes</Text>
+        <Text style={styles.headerTitle}>Mentores</Text>
       </TouchableOpacity>
 
       <Animated.View style={[styles.content, { height: heightAnim }]}>
