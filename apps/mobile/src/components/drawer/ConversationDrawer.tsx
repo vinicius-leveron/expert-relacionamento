@@ -17,7 +17,42 @@ import { useChatStore } from '@/stores/chat.store';
 import { useAuthStore } from '@/stores/auth.store';
 import { NewConversationButton } from './NewConversationButton';
 import { ConversationListItem } from './ConversationListItem';
+import {
+  ConversationCategories,
+  type ConversationCategory,
+} from './ConversationCategories';
 import { colors, spacing, typography, getShadow } from '@/theme';
+
+const DRAWER_CATEGORIES: ConversationCategory[] = [
+  {
+    id: 'reconquista',
+    title: 'Reconquista',
+    description: 'Quero retomar contato sem parecer desesperado.',
+    icon: 'heart-outline',
+    prompt: 'Quero ajuda para retomar contato com alguém sem parecer desesperado. Me guia pelo melhor próximo passo.',
+  },
+  {
+    id: 'mensagens',
+    title: 'Mensagens',
+    description: 'Me ajuda a responder uma conversa delicada.',
+    icon: 'chatbubble-ellipses-outline',
+    prompt: 'Me ajuda a responder uma conversa delicada sem soar carente, frio ou agressivo.',
+  },
+  {
+    id: 'conflitos',
+    title: 'Conflitos',
+    description: 'Preciso lidar com uma briga sem piorar tudo.',
+    icon: 'flame-outline',
+    prompt: 'Estou lidando com um conflito no relacionamento e preciso agir sem piorar a situação.',
+  },
+  {
+    id: 'clareza',
+    title: 'Clareza',
+    description: 'Quero entender o que essa relação realmente é.',
+    icon: 'compass-outline',
+    prompt: 'Quero entender com clareza o estágio dessa relação e qual leitura mais madura eu deveria fazer agora.',
+  },
+];
 
 export function ConversationDrawer({ navigation }: DrawerContentComponentProps) {
   const insets = useSafeAreaInsets();
@@ -38,54 +73,64 @@ export function ConversationDrawer({ navigation }: DrawerContentComponentProps) 
     fetchConversations();
   }, [fetchConversations]);
 
-  const handleNewConversation = useCallback(async () => {
-    try {
-      const newConversation = await createConversation();
-
-      // Limpar mensagens do chat e definir novo conversationId
+  const prepareConversationState = useCallback(
+    (nextConversationId: string) => {
       chatStore.disconnectSSE();
       useChatStore.setState({
         messages: [],
-        conversationId: newConversation.id,
+        conversationId: nextConversationId,
         pendingAttachments: [],
         isLoading: false,
+        responseStartedAt: null,
       });
 
-      // Reconectar SSE para nova conversa
       if (accessToken) {
         chatStore.connectSSE(accessToken);
       }
+    },
+    [accessToken, chatStore],
+  );
+
+  const handleNewConversation = useCallback(async () => {
+    try {
+      const newConversation = await createConversation();
+      prepareConversationState(newConversation.id);
 
       navigation.closeDrawer();
     } catch (error) {
       console.error('Erro ao criar conversa:', error);
     }
-  }, [createConversation, chatStore, navigation, accessToken]);
+  }, [createConversation, navigation, prepareConversationState]);
 
   const handleSelectConversation = useCallback(
     async (conversation: Conversation) => {
       selectConversation(conversation.id);
-
-      // Atualizar chat store com nova conversa
-      chatStore.disconnectSSE();
-      useChatStore.setState({
-        messages: [],
-        conversationId: conversation.id,
-        pendingAttachments: [],
-        isLoading: false,
-      });
+      prepareConversationState(conversation.id);
 
       // Carregar mensagens da conversa selecionada
       await chatStore.loadMessages();
 
-      // Reconectar SSE para nova conversa
-      if (accessToken) {
-        chatStore.connectSSE(accessToken);
-      }
-
       navigation.closeDrawer();
     },
-    [selectConversation, chatStore, navigation, accessToken]
+    [selectConversation, prepareConversationState, chatStore, navigation]
+  );
+
+  const handleSelectCategory = useCallback(
+    async (category: ConversationCategory) => {
+      try {
+        const newConversation = await createConversation();
+        prepareConversationState(newConversation.id);
+        useConversationsStore.getState().updateConversationPreview({
+          id: newConversation.id,
+          summary: category.prompt,
+        });
+        navigation.closeDrawer();
+        await chatStore.sendMessage(category.prompt);
+      } catch (error) {
+        console.error('Erro ao iniciar conversa por categoria:', error);
+      }
+    },
+    [createConversation, prepareConversationState, navigation, chatStore],
   );
 
   const handleDeleteConversation = useCallback(
@@ -160,6 +205,7 @@ export function ConversationDrawer({ navigation }: DrawerContentComponentProps) 
 
       {/* Conversations List */}
       <FlatList
+        style={styles.list}
         data={conversations}
         renderItem={renderItem}
         keyExtractor={(item) => item.id}
@@ -168,6 +214,12 @@ export function ConversationDrawer({ navigation }: DrawerContentComponentProps) 
           conversations.length === 0 ? styles.emptyList : undefined
         }
         showsVerticalScrollIndicator={false}
+      />
+
+      <ConversationCategories
+        categories={DRAWER_CATEGORIES}
+        onSelect={handleSelectCategory}
+        disabled={isLoading || chatStore.isUploadingAttachment}
       />
 
       {/* Footer */}
@@ -217,6 +269,9 @@ const styles = StyleSheet.create({
     paddingTop: spacing.md,
     paddingBottom: spacing.sm,
     fontFamily: 'Inter_600SemiBold',
+  },
+  list: {
+    flex: 1,
   },
   emptyList: {
     flex: 1,
