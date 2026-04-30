@@ -364,10 +364,37 @@ async function readFileAsBase64(uri: string): Promise<string> {
 }
 
 async function syncConversationMessagesAfterMutation(
-  loadMessages: () => Promise<void>,
+  params: {
+    loadMessages: () => Promise<void>;
+    loadAttachments: () => Promise<void>;
+    getState: () => Pick<
+      ChatState,
+      'conversationId' | 'isLoading' | 'messages' | 'pendingAttachments' | 'responseStartedAt'
+    >;
+  },
 ): Promise<void> {
   try {
-    await loadMessages();
+    await Promise.all([params.loadMessages(), params.loadAttachments()]);
+
+    const startedAt = params.getState().responseStartedAt ?? Date.now();
+
+    while (Date.now() - startedAt < RESPONSE_TIMEOUT_MS) {
+      const state = params.getState();
+      const hasPendingWork =
+        state.isLoading ||
+        hasActiveAttachmentWork(state.messages, state.pendingAttachments);
+
+      if (!hasPendingWork) {
+        return;
+      }
+
+      await new Promise((resolve) =>
+        setTimeout(resolve, Math.min(POLL_INTERVAL_MS, 1500)),
+      );
+      await Promise.all([params.loadMessages(), params.loadAttachments()]);
+    }
+
+    await params.loadMessages();
   } catch (error) {
     console.warn('Failed to sync chat messages after mutation:', error);
   }
@@ -439,7 +466,11 @@ export const useChatStore = create<ChatState>((set, get) => ({
         throw new Error(errorMessage);
       }
 
-      await syncConversationMessagesAfterMutation(get().loadMessages);
+      await syncConversationMessagesAfterMutation({
+        loadMessages: get().loadMessages,
+        loadAttachments: get().loadAttachments,
+        getState: get,
+      });
     } catch (error) {
       set((state) => ({
         messages: state.messages.map((message) =>
@@ -511,7 +542,11 @@ export const useChatStore = create<ChatState>((set, get) => ({
         throw new Error(errorMessage);
       }
 
-      await syncConversationMessagesAfterMutation(get().loadMessages);
+      await syncConversationMessagesAfterMutation({
+        loadMessages: get().loadMessages,
+        loadAttachments: get().loadAttachments,
+        getState: get,
+      });
     } catch (error) {
       set((state) => ({
         messages: state.messages.map((message) =>
@@ -592,7 +627,11 @@ export const useChatStore = create<ChatState>((set, get) => ({
         throw new Error(errorMessage);
       }
 
-      await syncConversationMessagesAfterMutation(get().loadMessages);
+      await syncConversationMessagesAfterMutation({
+        loadMessages: get().loadMessages,
+        loadAttachments: get().loadAttachments,
+        getState: get,
+      });
     } catch (error) {
       set((state) => ({
         messages: state.messages.map((message) =>
@@ -662,7 +701,11 @@ export const useChatStore = create<ChatState>((set, get) => ({
           throw new Error(errorMessage);
         }
 
-        await syncConversationMessagesAfterMutation(get().loadMessages);
+        await syncConversationMessagesAfterMutation({
+          loadMessages: get().loadMessages,
+          loadAttachments: get().loadAttachments,
+          getState: get,
+        });
 
         return;
       }
@@ -687,7 +730,11 @@ export const useChatStore = create<ChatState>((set, get) => ({
           throw new Error(errorMessage);
         }
 
-        await syncConversationMessagesAfterMutation(get().loadMessages);
+        await syncConversationMessagesAfterMutation({
+          loadMessages: get().loadMessages,
+          loadAttachments: get().loadAttachments,
+          getState: get,
+        });
 
         return;
       }
@@ -713,7 +760,11 @@ export const useChatStore = create<ChatState>((set, get) => ({
         throw new Error(errorMessage);
       }
 
-      await syncConversationMessagesAfterMutation(get().loadMessages);
+      await syncConversationMessagesAfterMutation({
+        loadMessages: get().loadMessages,
+        loadAttachments: get().loadAttachments,
+        getState: get,
+      });
     } catch (error) {
       set((state) => ({
         messages: state.messages.map((item) =>
