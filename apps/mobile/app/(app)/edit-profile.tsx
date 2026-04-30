@@ -126,6 +126,11 @@ export default function EditProfileScreen() {
   };
 
   const handleChoosePhoto = () => {
+    if (Platform.OS === 'web') {
+      void handlePickImage();
+      return;
+    }
+
     Alert.alert('Foto de Perfil', 'Como você quer adicionar sua foto?', [
       { text: 'Cancelar', style: 'cancel' },
       { text: 'Tirar Foto', onPress: handleTakePhoto },
