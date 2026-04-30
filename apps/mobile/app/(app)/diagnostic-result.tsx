@@ -126,7 +126,7 @@ export default function DiagnosticResultScreen() {
   }, [scaleAnim, fadeAnim, slideAnim]);
 
   const handleContinue = () => {
-    router.replace('/(app)/(tabs)/journey');
+    router.replace('/(app)/(tabs)/chat');
   };
 
   return (
@@ -193,6 +193,16 @@ export default function DiagnosticResultScreen() {
             <Text style={styles.focusTitle}>Próximo passo mais útil</Text>
             <Text style={styles.focusText}>{archetype.focus}</Text>
           </View>
+
+          <View style={styles.nextStepCard}>
+            <Ionicons name="chatbubble-ellipses-outline" size={22} color={colors.primaryDark} />
+            <View style={styles.nextStepContent}>
+              <Text style={styles.nextStepTitle}>Próximo passo</Text>
+              <Text style={styles.nextStepText}>
+                Agora faz mais sentido voltar para a conversa e transformar esse resultado em orientação prática.
+              </Text>
+            </View>
+          </View>
         </Animated.View>
       </ScrollView>
 
@@ -203,7 +213,7 @@ export default function DiagnosticResultScreen() {
           onPress={handleContinue}
           activeOpacity={0.8}
         >
-          <Text style={styles.buttonText}>Ver meu plano inicial</Text>
+          <Text style={styles.buttonText}>Continuar no chat</Text>
           <Ionicons name="arrow-forward" size={20} color={colors.white} />
         </TouchableOpacity>
       </View>
@@ -307,6 +317,31 @@ const styles = StyleSheet.create({
     ...typography.body,
     color: colors.textSecondary,
     textAlign: 'center',
+    fontFamily: 'Inter_400Regular',
+  },
+  nextStepCard: {
+    width: '100%',
+    marginTop: spacing.md,
+    borderRadius: radius.md,
+    padding: spacing.md,
+    backgroundColor: colors.primaryLight,
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: spacing.sm,
+  },
+  nextStepContent: {
+    flex: 1,
+  },
+  nextStepTitle: {
+    ...typography.bodyMedium,
+    color: colors.primaryDark,
+    marginBottom: 4,
+    fontFamily: 'Inter_600SemiBold',
+  },
+  nextStepText: {
+    ...typography.bodySmall,
+    color: colors.primaryDark,
+    lineHeight: 20,
     fontFamily: 'Inter_400Regular',
   },
   footer: {
