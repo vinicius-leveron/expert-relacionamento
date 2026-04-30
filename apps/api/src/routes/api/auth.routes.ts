@@ -49,33 +49,25 @@ export function createAuthRoutes(config: AuthRoutesConfig) {
       )
     }
 
-    if (!hasEmailDelivery) {
-      logger.error({ email }, 'Magic link requested without production email delivery configured')
-      return c.json(
-        {
-          success: false,
-          error: {
-            code: 'EMAIL_NOT_CONFIGURED',
-            message: 'O login por email não está configurado em produção.',
-          },
-        },
-        503
-      )
-    }
-
     try {
       const link = await magicLinkService.sendMagicLink(email)
-      logger.info({ email }, 'Magic link sent')
+      logger.info(
+        { email, hasEmailDelivery },
+        hasEmailDelivery
+          ? 'Magic link sent'
+          : 'Magic link generated without email delivery configured'
+      )
 
       // Em desenvolvimento, retorna o link para facilitar testes
-      const isDev = !isProduction
+      const shouldReturnDevLink = !hasEmailDelivery || !isProduction
 
       return c.json({
         success: true,
         data: {
-          message: 'Magic link sent to your email',
-          // Só retorna o link em dev (NUNCA em produção!)
-          ...(isDev && { devLink: link }),
+          message: hasEmailDelivery
+            ? 'Magic link sent to your email'
+            : 'Magic link generated for direct browser login',
+          ...(shouldReturnDevLink && { devLink: link }),
         },
       })
     } catch (error) {
