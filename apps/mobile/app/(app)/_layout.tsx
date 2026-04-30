@@ -1,5 +1,5 @@
 import { Redirect } from 'expo-router';
-import { View, ActivityIndicator, StyleSheet } from 'react-native';
+import { View, ActivityIndicator, StyleSheet, Platform } from 'react-native';
 import { Drawer } from 'expo-router/drawer';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { useAuthStore } from '@/stores/auth.store';
@@ -8,6 +8,7 @@ import { colors } from '@/theme';
 
 export default function AppLayout() {
   const { isAuthenticated, isLoading } = useAuthStore();
+  const isWeb = Platform.OS === 'web';
 
   if (isLoading) {
     return (
@@ -27,12 +28,13 @@ export default function AppLayout() {
         drawerContent={(props) => <ConversationDrawer {...props} />}
         screenOptions={{
           headerShown: false,
-          drawerType: 'front',
+          drawerType: isWeb ? 'permanent' : 'front',
           drawerStyle: {
             width: 300,
           },
-          swipeEnabled: true,
-          swipeEdgeWidth: 50,
+          swipeEnabled: !isWeb,
+          swipeEdgeWidth: isWeb ? 0 : 50,
+          overlayColor: 'transparent',
         }}
       >
         <Drawer.Screen

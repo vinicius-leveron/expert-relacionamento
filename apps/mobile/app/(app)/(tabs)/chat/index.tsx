@@ -54,7 +54,7 @@ export default function ChatScreen() {
     loadMessages,
   } = useChatStore();
   const { accessToken } = useAuthStore();
-  const { fetchConversations, activeId, setActiveId } = useConversationsStore();
+  const { fetchConversations, activeId } = useConversationsStore();
   const recordingRef = useRef<Audio.Recording | null>(null);
   const recordingTickerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const audioDraftClearRef = useRef<(() => void) | null>(null);
@@ -74,13 +74,6 @@ export default function ChatScreen() {
   useEffect(() => {
     fetchConversations();
   }, [fetchConversations]);
-
-  // Sincronizar conversationId do chat store com activeId do conversations store
-  useEffect(() => {
-    if (conversationId && conversationId !== activeId) {
-      setActiveId(conversationId);
-    }
-  }, [conversationId, activeId, setActiveId]);
 
   useEffect(() => {
     if (!activeId || activeId === conversationId) {
