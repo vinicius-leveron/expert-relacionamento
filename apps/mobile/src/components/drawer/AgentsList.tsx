@@ -110,16 +110,13 @@ const styles = StyleSheet.create({
   header: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: spacing.sm,
-    paddingVertical: spacing.sm,
+    gap: spacing.xs,
+    paddingVertical: spacing.xs,
     paddingHorizontal: spacing.sm,
-    marginHorizontal: spacing.sm,
-    borderRadius: radius.md,
-    backgroundColor: colors.background,
   },
   headerTitle: {
-    ...typography.body,
-    color: colors.textPrimary,
+    ...typography.bodySmall,
+    color: colors.textSecondary,
     fontFamily: 'Inter_500Medium',
   },
   content: {
