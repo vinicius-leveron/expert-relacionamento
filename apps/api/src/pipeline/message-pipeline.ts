@@ -303,11 +303,36 @@ Os arquivos enviados nesta conversa estão bloqueados até a assinatura ativa. N
       ragContext: combinedRagContext || undefined,
     })
 
-    // Chama a IA
-    const result = await this.deps.aiProvider.complete(messages, {
-      maxTokens: 500,
-      temperature: 0.7,
-    })
+    let result
+
+    try {
+      // Chama a IA
+      result = await this.deps.aiProvider.complete(messages, {
+        maxTokens: 500,
+        temperature: 0.7,
+      })
+    } catch (error) {
+      const aiErrorMessage = this.extractAIErrorMessage(error)
+
+      if (hasImage && this.isRecoverableImageProcessingError(aiErrorMessage)) {
+        this.deps.logger.warn(
+          { error, userId: user.id, conversationId: conversation?.id, aiErrorMessage },
+          'AI provider could not process image, using graceful fallback response',
+        )
+
+        const fallbackContent =
+          'Recebi sua imagem, mas não consegui processá-la visualmente agora. Tente reenviar uma foto mais nítida em JPG ou PNG, ou me diga em texto o que você quer que eu observe nela.'
+
+        await this.saveAIResponse(conversation?.id, {
+          content: fallbackContent,
+          usage: { inputTokens: 0, outputTokens: 0 },
+        })
+
+        return fallbackContent
+      }
+
+      throw error
+    }
 
     // Processa diagnóstico se IA indicou conclusão
     const finalContent = await this.processDiagnosisIfComplete(user, result.content, history)
@@ -324,6 +349,38 @@ Os arquivos enviados nesta conversa estão bloqueados até a assinatura ativa. N
     }
 
     return finalContent
+  }
+
+  private extractAIErrorMessage(error: unknown): string | undefined {
+    if (error instanceof Error && error.message) {
+      return error.message
+    }
+
+    if (
+      error &&
+      typeof error === 'object' &&
+      'error' in error &&
+      error.error &&
+      typeof error.error === 'object' &&
+      'error' in error.error &&
+      error.error.error &&
+      typeof error.error.error === 'object' &&
+      'message' in error.error.error &&
+      typeof error.error.error.message === 'string'
+    ) {
+      return error.error.error.message
+    }
+
+    return undefined
+  }
+
+  private isRecoverableImageProcessingError(message?: string): boolean {
+    if (!message) {
+      return false
+    }
+
+    const normalizedMessage = message.toLowerCase()
+    return normalizedMessage.includes('could not process image')
   }
 
   /**
