@@ -6,6 +6,7 @@ import {
   Animated,
   Image,
   TouchableOpacity,
+  Platform,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { Audio as ExpoAudio, type AVPlaybackStatus } from 'expo-av';
@@ -24,6 +25,8 @@ import {
 import { QuickReplyButtons } from './QuickReplyButtons';
 import { ArchetypeCard } from './ArchetypeCard';
 import { JourneyCard } from './JourneyCard';
+
+const USE_NATIVE_DRIVER = Platform.OS !== 'web';
 
 interface ChatBubbleProps {
   role: 'user' | 'assistant';
@@ -284,12 +287,12 @@ export function ChatBubble({
         Animated.timing(fadeAnim, {
           toValue: 1,
           duration: 250,
-          useNativeDriver: true,
+          useNativeDriver: USE_NATIVE_DRIVER,
         }),
         Animated.timing(slideAnim, {
           toValue: 0,
           duration: 250,
-          useNativeDriver: true,
+          useNativeDriver: USE_NATIVE_DRIVER,
         }),
       ]).start();
     }

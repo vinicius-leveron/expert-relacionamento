@@ -30,6 +30,8 @@ import {
 } from '@/components/chat';
 import { colors, spacing, typography, getShadow, sizes } from '@/theme';
 
+const USE_NATIVE_DRIVER = Platform.OS !== 'web';
+
 export default function ChatScreen() {
   const flatListRef = useRef<FlatList>(null);
   const fadeAnim = useRef(new Animated.Value(0)).current;
@@ -145,7 +147,7 @@ export default function ChatScreen() {
     Animated.timing(fadeAnim, {
       toValue: 1,
       duration: 400,
-      useNativeDriver: true,
+      useNativeDriver: USE_NATIVE_DRIVER,
     }).start();
   }, [fadeAnim]);
 

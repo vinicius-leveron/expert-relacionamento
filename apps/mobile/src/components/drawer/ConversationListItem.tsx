@@ -53,13 +53,7 @@ export function ConversationListItem({
   };
 
   return (
-    <TouchableOpacity
-      style={[styles.container, isActive && styles.activeContainer]}
-      onPress={onPress}
-      activeOpacity={0.7}
-      accessibilityLabel={`Conversa: ${conversation.title}`}
-      accessibilityRole="button"
-    >
+    <View style={[styles.container, isActive && styles.activeContainer]}>
       <View style={styles.iconContainer}>
         <Ionicons
           name="chatbubble-outline"
@@ -68,15 +62,23 @@ export function ConversationListItem({
         />
       </View>
 
-      <View style={styles.content}>
-        <Text
-          style={[styles.title, isActive && styles.activeTitle]}
-          numberOfLines={1}
-        >
-          {conversation.title}
-        </Text>
-        <Text style={styles.date}>{formatDate(conversation.updatedAt)}</Text>
-      </View>
+      <TouchableOpacity
+        style={styles.contentButton}
+        onPress={onPress}
+        activeOpacity={0.7}
+        accessibilityLabel={`Conversa: ${conversation.title}`}
+        accessibilityRole="button"
+      >
+        <View style={styles.content}>
+          <Text
+            style={[styles.title, isActive && styles.activeTitle]}
+            numberOfLines={1}
+          >
+            {conversation.title}
+          </Text>
+          <Text style={styles.date}>{formatDate(conversation.updatedAt)}</Text>
+        </View>
+      </TouchableOpacity>
 
       <TouchableOpacity
         style={styles.deleteButton}
@@ -84,10 +86,11 @@ export function ConversationListItem({
         hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
         accessibilityLabel="Arquivar conversa"
         accessibilityRole="button"
+        activeOpacity={0.7}
       >
         <Ionicons name="trash-outline" size={16} color={colors.textMuted} />
       </TouchableOpacity>
-    </TouchableOpacity>
+    </View>
   );
 }
 
@@ -109,6 +112,9 @@ const styles = StyleSheet.create({
   },
   iconContainer: {
     marginRight: spacing.sm,
+  },
+  contentButton: {
+    flex: 1,
   },
   content: {
     flex: 1,

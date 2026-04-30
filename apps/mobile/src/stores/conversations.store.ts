@@ -22,6 +22,11 @@ interface ConversationsState {
   selectConversation: (id: string) => void;
   archiveConversation: (id: string) => Promise<void>;
   setActiveId: (id: string | null) => void;
+  updateConversationPreview: (params: {
+    id: string;
+    summary?: string;
+    updatedAt?: string;
+  }) => void;
   getActiveConversation: () => Conversation | undefined;
 }
 
@@ -48,12 +53,30 @@ interface CreateConversationResponse {
   };
 }
 
-function generateTitle(summary?: string): string {
-  if (summary && summary.trim()) {
-    const trimmed = summary.trim();
-    return trimmed.length > 40 ? trimmed.slice(0, 40) + '...' : trimmed;
+function normalizeConversationSummary(summary?: string): string | undefined {
+  if (!summary) {
+    return undefined;
   }
-  return 'Nova conversa';
+
+  const trimmed = summary.trim().replace(/\s+/g, ' ');
+  if (!trimmed) {
+    return undefined;
+  }
+
+  const firstSentence = trimmed.split(/[.!?]/)[0]?.trim() ?? trimmed;
+  const normalized = firstSentence || trimmed;
+
+  return normalized.length > 80 ? `${normalized.slice(0, 80).trim()}...` : normalized;
+}
+
+function generateTitle(summary?: string): string {
+  const normalized = normalizeConversationSummary(summary);
+
+  if (!normalized) {
+    return 'Nova conversa';
+  }
+
+  return normalized.length > 48 ? `${normalized.slice(0, 48).trim()}...` : normalized;
 }
 
 export const useConversationsStore = create<ConversationsState>((set, get) => ({
@@ -169,6 +192,23 @@ export const useConversationsStore = create<ConversationsState>((set, get) => ({
 
   setActiveId: (id: string | null) => {
     set({ activeId: id });
+  },
+
+  updateConversationPreview: ({ id, summary, updatedAt }) => {
+    const normalizedSummary = normalizeConversationSummary(summary);
+
+    set((state) => ({
+      conversations: state.conversations.map((conversation) =>
+        conversation.id === id
+          ? {
+              ...conversation,
+              summary: normalizedSummary ?? conversation.summary,
+              title: generateTitle(normalizedSummary ?? conversation.summary),
+              updatedAt: updatedAt ?? new Date().toISOString(),
+            }
+          : conversation,
+      ),
+    }));
   },
 
   getActiveConversation: () => {

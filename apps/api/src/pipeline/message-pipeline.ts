@@ -383,6 +383,34 @@ Os arquivos enviados nesta conversa estão bloqueados até a assinatura ativa. N
     return normalizedMessage.includes('could not process image')
   }
 
+  private deriveConversationSummaryFromUserMessage(content: string): string | undefined {
+    const normalized = content.trim().replace(/\s+/g, ' ')
+    if (!normalized) {
+      return undefined
+    }
+
+    const lowerCased = normalized.toLowerCase()
+    const genericFallbacks = new Set([
+      'analise esta imagem.',
+      'analise esta imagem',
+      'transcreva e analise este áudio.',
+      'transcreva e analise este áudio',
+      'transcreva e analise este audio.',
+      'transcreva e analise este audio',
+      'analise os arquivos anexados e use-os como contexto para responder.',
+      'analise os arquivos anexados e use-os como contexto para responder',
+    ])
+
+    if (genericFallbacks.has(lowerCased)) {
+      return undefined
+    }
+
+    const firstSentence = normalized.split(/[.!?]/)[0]?.trim() ?? normalized
+    const preview = firstSentence || normalized
+
+    return preview.length > 80 ? `${preview.slice(0, 80).trim()}...` : preview
+  }
+
   /**
    * Processa diagnóstico quando IA indica conclusão com [PERFIL:arquetipo]
    */
@@ -442,7 +470,7 @@ Os arquivos enviados nesta conversa estão bloqueados até a assinatura ativa. N
 
     const storedContent =
       message.content.type === 'image'
-        ? (message.content.caption?.trim() ?? '[Imagem enviada para análise]')
+        ? (message.content.caption?.trim() ?? '')
         : messageText
 
     const metadata =
@@ -496,6 +524,14 @@ Os arquivos enviados nesta conversa estão bloqueados até a assinatura ativa. N
       metadata,
       attachmentIds,
     })
+
+    const currentConversation = await this.deps.conversationRepo.findById(conversationId)
+    if (!currentConversation?.summary) {
+      const nextSummary = this.deriveConversationSummaryFromUserMessage(storedContent)
+      if (nextSummary) {
+        await this.deps.conversationRepo.updateSummary(conversationId, nextSummary)
+      }
+    }
   }
 
   private async searchRAG(query: string): Promise<string | undefined> {

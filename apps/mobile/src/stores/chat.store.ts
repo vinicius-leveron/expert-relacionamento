@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import { api } from '@/api/client';
 import * as FileSystem from 'expo-file-system';
+import { useConversationsStore } from '@/stores/conversations.store';
 
 export type AttachmentStatus =
   | 'pending_upload'
@@ -177,6 +178,22 @@ interface MutationResponse {
 const POLL_INTERVAL_MS = 2500;
 const RESPONSE_TIMEOUT_MS = 45_000;
 
+function deriveConversationPreviewFromText(content?: string): string | undefined {
+  if (!content) {
+    return undefined;
+  }
+
+  const normalized = content.trim().replace(/\s+/g, ' ');
+  if (!normalized) {
+    return undefined;
+  }
+
+  const firstSentence = normalized.split(/[.!?]/)[0]?.trim() ?? normalized;
+  const preview = firstSentence || normalized;
+
+  return preview.length > 80 ? `${preview.slice(0, 80).trim()}...` : preview;
+}
+
 function normalizeMessageText(content: string): string {
   return content.trim().replace(/\s+/g, ' ');
 }
@@ -323,12 +340,8 @@ async function ensureConversationId(
     return conversationId;
   }
 
-  const createResponse = await api.post<ConversationResponse>('/conversations');
-  if (!createResponse.data.success) {
-    throw new Error('Failed to create conversation');
-  }
-
-  const nextConversationId = createResponse.data.data.id;
+  const newConversation = await useConversationsStore.getState().createConversation();
+  const nextConversationId = newConversation.id;
   setConversationId(nextConversationId);
   return nextConversationId;
 }
@@ -466,6 +479,14 @@ export const useChatStore = create<ChatState>((set, get) => ({
         throw new Error(errorMessage);
       }
 
+      const nextConversationPreview = deriveConversationPreviewFromText(trimmedContent);
+      if (nextConversationPreview) {
+        useConversationsStore.getState().updateConversationPreview({
+          id: conversationId,
+          summary: nextConversationPreview,
+        });
+      }
+
       await syncConversationMessagesAfterMutation({
         loadMessages: get().loadMessages,
         loadAttachments: get().loadAttachments,
@@ -498,7 +519,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
     const optimisticUserMessage: Message = {
       id: optimisticMessageId,
       role: 'user',
-      content: caption && caption.length > 0 ? caption : '[Imagem enviada para análise]',
+      content: caption && caption.length > 0 ? caption : '',
       contentType: 'image',
       image: {
         url: image.uri,
@@ -540,6 +561,14 @@ export const useChatStore = create<ChatState>((set, get) => ({
 
       if (errorMessage) {
         throw new Error(errorMessage);
+      }
+
+      const nextConversationPreview = deriveConversationPreviewFromText(caption);
+      if (nextConversationPreview) {
+        useConversationsStore.getState().updateConversationPreview({
+          id: conversationId,
+          summary: nextConversationPreview,
+        });
       }
 
       await syncConversationMessagesAfterMutation({
@@ -625,6 +654,14 @@ export const useChatStore = create<ChatState>((set, get) => ({
 
       if (errorMessage) {
         throw new Error(errorMessage);
+      }
+
+      const nextConversationPreview = deriveConversationPreviewFromText(caption);
+      if (nextConversationPreview) {
+        useConversationsStore.getState().updateConversationPreview({
+          id: conversationId,
+          summary: nextConversationPreview,
+        });
       }
 
       await syncConversationMessagesAfterMutation({

@@ -118,7 +118,7 @@ export default function LoginScreen() {
                 style={styles.inputIcon}
               />
               <TextInput
-                style={styles.input}
+                style={[styles.input, Platform.OS === 'web' ? styles.webTextInputReset : null]}
                 placeholder="seu@email.com"
                 placeholderTextColor={colors.textMuted}
                 value={email}
@@ -266,6 +266,11 @@ const styles = StyleSheet.create({
     color: colors.textPrimary,
     fontFamily: 'Inter_400Regular',
   },
+  webTextInputReset: {
+    outlineStyle: 'none',
+    outlineWidth: 0,
+    boxShadow: 'none',
+  } as never,
   errorContainer: {
     flexDirection: 'row',
     alignItems: 'center',

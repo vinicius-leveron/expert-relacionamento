@@ -6,10 +6,13 @@ import {
   TouchableOpacity,
   StyleSheet,
   Animated,
+  Platform,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import type { ChatAttachment } from '@/stores/chat.store';
 import { colors, spacing, radius, sizes, getShadow, typography } from '@/theme';
+
+const USE_NATIVE_DRIVER = Platform.OS !== 'web';
 
 interface MessageInputProps {
   onSend: (message: string) => Promise<void> | void;
@@ -81,12 +84,12 @@ export function MessageInput({
       Animated.timing(scaleAnim, {
         toValue: 0.9,
         duration: 50,
-        useNativeDriver: true,
+        useNativeDriver: USE_NATIVE_DRIVER,
       }),
       Animated.timing(scaleAnim, {
         toValue: 1,
         duration: 100,
-        useNativeDriver: true,
+        useNativeDriver: USE_NATIVE_DRIVER,
       }),
     ]).start();
 
@@ -169,7 +172,7 @@ export function MessageInput({
 
         <View style={styles.inputWrapper}>
           <TextInput
-            style={styles.input}
+            style={[styles.input, Platform.OS === 'web' ? styles.webTextInputReset : null]}
             value={text}
             onChangeText={setText}
             placeholder={placeholder}
@@ -307,6 +310,8 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: colors.gray100,
     borderRadius: radius.xl,
+    borderWidth: 1,
+    borderColor: 'transparent',
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.sm,
     minHeight: sizes.touchMin,
@@ -321,6 +326,11 @@ const styles = StyleSheet.create({
     paddingBottom: 0,
     fontFamily: 'Inter_400Regular',
   },
+  webTextInputReset: {
+    outlineStyle: 'none',
+    outlineWidth: 0,
+    boxShadow: 'none',
+  } as never,
   sendButton: {
     width: sizes.touchMin,
     height: sizes.touchMin,

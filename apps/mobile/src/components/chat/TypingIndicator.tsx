@@ -1,6 +1,8 @@
 import { useEffect, useRef } from 'react';
-import { View, Text, Animated, StyleSheet } from 'react-native';
+import { View, Text, Animated, StyleSheet, Platform } from 'react-native';
 import { colors, spacing, radius, sizes } from '@/theme';
+
+const USE_NATIVE_DRIVER = Platform.OS !== 'web';
 
 interface TypingIndicatorProps {
   visible: boolean;
@@ -21,12 +23,12 @@ export function TypingIndicator({ visible }: TypingIndicatorProps) {
           Animated.timing(dot, {
             toValue: 1,
             duration: 300,
-            useNativeDriver: true,
+            useNativeDriver: USE_NATIVE_DRIVER,
           }),
           Animated.timing(dot, {
             toValue: 0,
             duration: 300,
-            useNativeDriver: true,
+            useNativeDriver: USE_NATIVE_DRIVER,
           }),
         ])
       );

@@ -1,7 +1,9 @@
 import { useRef, useEffect } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Animated } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Animated, Platform } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { colors, spacing, typography, radius, getShadow, sizes } from '@/theme';
+
+const USE_NATIVE_DRIVER = Platform.OS !== 'web';
 
 interface ChatHeaderProps {
   name?: string;
@@ -25,12 +27,12 @@ function TypingDots() {
           Animated.timing(dot, {
             toValue: 1,
             duration: 300,
-            useNativeDriver: true,
+            useNativeDriver: USE_NATIVE_DRIVER,
           }),
           Animated.timing(dot, {
             toValue: 0,
             duration: 300,
-            useNativeDriver: true,
+            useNativeDriver: USE_NATIVE_DRIVER,
           }),
         ])
       );
