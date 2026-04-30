@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { View, Text, StyleSheet, ActivityIndicator } from 'react-native';
 import { useLocalSearchParams, router } from 'expo-router';
 import { useAuthStore } from '@/stores/auth.store';
@@ -7,19 +7,30 @@ export default function VerifyScreen() {
   const { token } = useLocalSearchParams<{ token: string }>();
   const { verifyMagicLink } = useAuthStore();
   const [error, setError] = useState<string | null>(null);
+  const hasAttemptedVerification = useRef(false);
 
   useEffect(() => {
-    if (token) {
-      verifyMagicLink(token)
-        .then(() => {
-          router.replace('/(app)/(tabs)/chat');
-        })
-        .catch((err) => {
-          setError('Link inválido ou expirado. Solicite um novo.');
-        });
-    } else {
-      setError('Token não encontrado');
+    if (hasAttemptedVerification.current) {
+      return;
     }
+
+    const normalizedToken = Array.isArray(token) ? token[0] : token;
+
+    if (!normalizedToken) {
+      setError('Token não encontrado');
+      return;
+    }
+
+    hasAttemptedVerification.current = true;
+
+    verifyMagicLink(normalizedToken)
+      .then(() => {
+        router.replace('/(app)/(tabs)/chat');
+      })
+      .catch(() => {
+        setError('Link inválido ou expirado. Solicite um novo.');
+        hasAttemptedVerification.current = false;
+      });
   }, [token, verifyMagicLink]);
 
   if (error) {
