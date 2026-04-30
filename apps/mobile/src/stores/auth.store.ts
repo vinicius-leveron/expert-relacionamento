@@ -76,18 +76,35 @@ export const useAuthStore = create<AuthState>((set, get) => ({
 
       if (accessToken && refreshToken && userJson) {
         const user = JSON.parse(userJson);
-        identifyAnalyticsUser(user);
-        setSentryUser(user);
         set({
-          isAuthenticated: true,
           accessToken,
           refreshToken,
           user,
-          isLoading: false,
         });
-      } else {
-        set({ isLoading: false });
+
+        try {
+          await get().refreshAccessToken();
+          identifyAnalyticsUser(user);
+          setSentryUser(user);
+          set({
+            isAuthenticated: true,
+            user,
+            isLoading: false,
+          });
+          return;
+        } catch {}
       }
+
+      resetAnalyticsUser();
+      clearSentryUser();
+      resetDependentStores();
+      set({
+        isAuthenticated: false,
+        isLoading: false,
+        user: null,
+        accessToken: null,
+        refreshToken: null,
+      });
     } catch {
       set({ isLoading: false });
     }
@@ -189,6 +206,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
 
     set({
       isAuthenticated: false,
+      isLoading: false,
       user: null,
       accessToken: null,
       refreshToken: null,
