@@ -230,8 +230,8 @@ const styles = StyleSheet.create({
   emptyIconContainer: {
     width: 64,
     height: 64,
-    borderRadius: 32,
-    backgroundColor: colors.primaryLight,
+    borderRadius: radius.full,
+    backgroundColor: `${colors.primary}15`,
     justifyContent: 'center',
     alignItems: 'center',
     marginBottom: spacing.md,

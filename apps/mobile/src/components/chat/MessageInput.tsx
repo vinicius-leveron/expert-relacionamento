@@ -349,6 +349,7 @@ const styles = StyleSheet.create({
     paddingTop: 0,
     paddingBottom: 0,
     fontFamily: 'Inter_400Regular',
+    textAlignVertical: 'center',
   },
   webTextInputReset: {
     outlineStyle: 'none',
