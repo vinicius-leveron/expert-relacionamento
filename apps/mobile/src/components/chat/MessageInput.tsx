@@ -328,7 +328,7 @@ const styles = StyleSheet.create({
     borderRadius: sizes.touchMin / 2,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: colors.primaryLight,
+    backgroundColor: colors.gray100,
   },
   inputWrapper: {
     flex: 1,
