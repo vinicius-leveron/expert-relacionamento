@@ -40,10 +40,28 @@ export class WhisperAdapter implements TranscriptionPort {
     const buffer = Buffer.from(await response.arrayBuffer())
 
     const contentType = response.headers.get('content-type') ?? ''
-    return this.transcribeBuffer(buffer, this.resolveFormat(audioUrl, contentType))
+    const fileFormat = this.resolveFormat(audioUrl, contentType)
+    return this.transcribeBufferInternal(buffer, fileFormat)
   }
 
   async transcribeBuffer(
+    buffer: Buffer,
+    format: 'mp3' | 'wav' | 'ogg',
+  ): Promise<TranscriptionResult> {
+    const fileFormat = this.formatToFileFormat(format)
+    return this.transcribeBufferInternal(buffer, fileFormat)
+  }
+
+  private formatToFileFormat(format: 'mp3' | 'wav' | 'ogg'): TranscriptionFileFormat {
+    const formats: Record<'mp3' | 'wav' | 'ogg', TranscriptionFileFormat> = {
+      mp3: { fileName: 'audio.mp3', mimeType: 'audio/mpeg' },
+      wav: { fileName: 'audio.wav', mimeType: 'audio/wav' },
+      ogg: { fileName: 'audio.ogg', mimeType: 'audio/ogg' },
+    }
+    return formats[format]
+  }
+
+  private async transcribeBufferInternal(
     buffer: Buffer,
     format: TranscriptionFileFormat,
   ): Promise<TranscriptionResult> {
