@@ -363,6 +363,16 @@ async function readFileAsBase64(uri: string): Promise<string> {
   });
 }
 
+async function syncConversationMessagesAfterMutation(
+  loadMessages: () => Promise<void>,
+): Promise<void> {
+  try {
+    await loadMessages();
+  } catch (error) {
+    console.warn('Failed to sync chat messages after mutation:', error);
+  }
+}
+
 export const useChatStore = create<ChatState>((set, get) => ({
   messages: [],
   pendingAttachments: [],
@@ -428,6 +438,8 @@ export const useChatStore = create<ChatState>((set, get) => ({
       if (errorMessage) {
         throw new Error(errorMessage);
       }
+
+      await syncConversationMessagesAfterMutation(get().loadMessages);
     } catch (error) {
       set((state) => ({
         messages: state.messages.map((message) =>
@@ -498,6 +510,8 @@ export const useChatStore = create<ChatState>((set, get) => ({
       if (errorMessage) {
         throw new Error(errorMessage);
       }
+
+      await syncConversationMessagesAfterMutation(get().loadMessages);
     } catch (error) {
       set((state) => ({
         messages: state.messages.map((message) =>
@@ -577,6 +591,8 @@ export const useChatStore = create<ChatState>((set, get) => ({
       if (errorMessage) {
         throw new Error(errorMessage);
       }
+
+      await syncConversationMessagesAfterMutation(get().loadMessages);
     } catch (error) {
       set((state) => ({
         messages: state.messages.map((message) =>
@@ -646,6 +662,8 @@ export const useChatStore = create<ChatState>((set, get) => ({
           throw new Error(errorMessage);
         }
 
+        await syncConversationMessagesAfterMutation(get().loadMessages);
+
         return;
       }
 
@@ -668,6 +686,8 @@ export const useChatStore = create<ChatState>((set, get) => ({
         if (errorMessage) {
           throw new Error(errorMessage);
         }
+
+        await syncConversationMessagesAfterMutation(get().loadMessages);
 
         return;
       }
@@ -692,6 +712,8 @@ export const useChatStore = create<ChatState>((set, get) => ({
       if (errorMessage) {
         throw new Error(errorMessage);
       }
+
+      await syncConversationMessagesAfterMutation(get().loadMessages);
     } catch (error) {
       set((state) => ({
         messages: state.messages.map((item) =>

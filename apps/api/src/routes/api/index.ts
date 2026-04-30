@@ -873,9 +873,7 @@ export function createApiRoutes(config: ApiRoutesConfig) {
         }
       }
 
-      // Process message through pipeline (async - response via SSE)
-      // Note: The pipeline will emit the response via MessageEmitter
-      const pipelineTask = appPipeline.processAppMessage({
+      const pipelineResult = await appPipeline.processAppMessage({
         userId,
         conversationId,
         content,
@@ -884,13 +882,34 @@ export function createApiRoutes(config: ApiRoutesConfig) {
         attachmentIds,
       })
       pipelineDelegated = true
-      pipelineTask.catch((error) => {
-        logger.error({ error, userId, conversationId }, 'Pipeline processing failed')
-      })
+
+      if (!pipelineResult.success) {
+        logger.error(
+          {
+            userId,
+            conversationId,
+            error: pipelineResult.error,
+          },
+          'Pipeline processing failed for app message',
+        )
+        return c.json(
+          {
+            success: false,
+            error: {
+              code: 'PROCESSING_FAILED',
+              message: 'Não consegui processar sua mensagem agora. Tente novamente.',
+            },
+          },
+          500,
+        )
+      }
 
       return c.json({
         success: true,
-        data: { message: 'Message received, response will be sent via SSE' },
+        data: {
+          message: 'Message processed successfully',
+          responseMessageId: pipelineResult.responseMessageId ?? null,
+        },
       })
     } catch (error) {
       const uploadedInlineMediaPath = uploadedInlineImagePath ?? uploadedInlineAudioPath
