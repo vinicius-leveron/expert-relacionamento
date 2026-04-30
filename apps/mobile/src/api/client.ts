@@ -1,7 +1,18 @@
+import Constants from 'expo-constants';
 import { storage } from '@/utils/storage';
 
-// Configure this based on environment
-export const API_BASE_URL = process.env.EXPO_PUBLIC_API_URL || 'https://perpetuo-api-fdrf.onrender.com/api/v1';
+type ExpoExtra = {
+  apiUrl?: string;
+};
+
+const expoConfigApiUrl =
+  (Constants.expoConfig?.extra as ExpoExtra | undefined)?.apiUrl ??
+  (Constants.manifest2?.extra as ExpoExtra | undefined)?.apiUrl;
+
+export const API_BASE_URL =
+  expoConfigApiUrl ||
+  process.env.EXPO_PUBLIC_API_URL ||
+  'https://perpetuo-api-fdrf.onrender.com/api/v1';
 
 const ACCESS_TOKEN_KEY = 'perpetuo_access_token';
 const REFRESH_TOKEN_KEY = 'perpetuo_refresh_token';
