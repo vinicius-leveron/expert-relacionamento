@@ -15,23 +15,26 @@ export default function TabsLayout() {
     <Tabs
       screenOptions={{
         tabBarActiveTintColor: colors.primary,
-        tabBarInactiveTintColor: colors.textMuted,
+        tabBarInactiveTintColor: colors.textSecondary,
         tabBarStyle: {
-          backgroundColor: colors.white,
+          backgroundColor: colors.background,
           borderTopColor: colors.border,
+          borderTopWidth: 0.5,
         },
         tabBarLabelStyle: {
           fontFamily: 'Inter_500Medium',
-          fontSize: 12,
+          fontSize: 11,
         },
         headerStyle: {
-          backgroundColor: colors.primary,
+          backgroundColor: colors.background,
         },
-        headerTintColor: colors.white,
+        headerTintColor: colors.textPrimary,
         headerTitleStyle: {
           fontWeight: '600',
           fontFamily: 'Inter_600SemiBold',
+          color: colors.textPrimary,
         },
+        headerShadowVisible: false,
       }}
     >
       <Tabs.Screen
@@ -47,25 +50,24 @@ export default function TabsLayout() {
       <Tabs.Screen
         name="categories"
         options={{
-          title: 'Categorias',
-          headerTitle: 'Categorias',
+          title: 'Explorar',
+          headerShown: false,
           tabBarIcon: ({ color, size }) => (
-            <Ionicons name="apps" size={size} color={color} />
+            <Ionicons name="compass" size={size} color={color} />
           ),
         }}
       />
-      {/* Tab Jornada removida - agora integrada ao chat */}
       <Tabs.Screen
         name="journey/index"
         options={{
-          href: null, // Esconde da tab bar
+          href: null,
         }}
       />
       <Tabs.Screen
         name="profile"
         options={{
           title: 'Perfil',
-          headerTitle: 'Meu Perfil',
+          headerShown: false,
           tabBarIcon: ({ color, size }) => (
             <Ionicons name="person" size={size} color={color} />
           ),

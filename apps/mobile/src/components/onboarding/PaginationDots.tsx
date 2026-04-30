@@ -39,6 +39,6 @@ const styles = StyleSheet.create({
     width: 24,
   },
   dotInactive: {
-    backgroundColor: colors.gray200,
+    backgroundColor: colors.textMuted,
   },
 });

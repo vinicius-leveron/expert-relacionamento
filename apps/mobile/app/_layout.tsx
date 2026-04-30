@@ -50,7 +50,7 @@ function RootLayout() {
           <Stack.Screen name="(auth)" options={{ animation: 'fade' }} />
           <Stack.Screen name="(app)" options={{ animation: 'fade' }} />
         </Stack>
-        <StatusBar style="auto" />
+        <StatusBar style="light" />
         {(!fontsLoaded && !fontError) || authLoading ? (
           <View style={styles.loadingOverlay} pointerEvents="none">
             <ActivityIndicator size="large" color={colors.primary} />
@@ -93,17 +93,18 @@ export default ExportedRootLayout;
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+    backgroundColor: colors.background,
   },
   loading: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: colors.primaryLight,
+    backgroundColor: colors.background,
   },
   loadingOverlay: {
     ...StyleSheet.absoluteFillObject,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: colors.primaryLight,
+    backgroundColor: colors.background,
   },
 });
