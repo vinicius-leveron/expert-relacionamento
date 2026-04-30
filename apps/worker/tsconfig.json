@@ -5,11 +5,5 @@
     "rootDir": "src"
   },
   "include": ["src/**/*"],
-  "exclude": ["node_modules", "dist"],
-  "references": [
-    { "path": "../../packages/core" },
-    { "path": "../../packages/database" },
-    { "path": "../../packages/ai-gateway" },
-    { "path": "../../packages/channels/whatsapp-adapter" }
-  ]
+  "exclude": ["node_modules", "dist"]
 }
