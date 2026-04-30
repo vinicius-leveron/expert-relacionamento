@@ -4,14 +4,14 @@
   "private": true,
   "type": "module",
   "exports": {
-    ".": "./src/index.ts",
-    "./providers": "./src/providers/index.ts",
-    "./embeddings": "./src/embeddings/index.ts",
-    "./rag": "./src/rag/index.ts",
-    "./transcription": "./src/transcription/index.ts",
-    "./context": "./src/context/index.ts",
-    "./prompts": "./src/prompts/index.ts",
-    "./diagnostic": "./src/diagnostic/index.ts"
+    ".": "./dist/index.js",
+    "./providers": "./dist/providers/index.js",
+    "./embeddings": "./dist/embeddings/index.js",
+    "./rag": "./dist/rag/index.js",
+    "./transcription": "./dist/transcription/index.js",
+    "./context": "./dist/context/index.js",
+    "./prompts": "./dist/prompts/index.js",
+    "./diagnostic": "./dist/diagnostic/index.js"
   },
   "scripts": {
     "build": "tsc",

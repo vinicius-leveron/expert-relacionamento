@@ -4,9 +4,9 @@
   "private": true,
   "type": "module",
   "exports": {
-    ".": "./src/index.ts",
-    "./ports": "./src/ports/index.ts",
-    "./domain": "./src/domain/index.ts"
+    ".": "./dist/index.js",
+    "./ports": "./dist/ports/index.js",
+    "./domain": "./dist/domain/index.js"
   },
   "scripts": {
     "build": "tsc",

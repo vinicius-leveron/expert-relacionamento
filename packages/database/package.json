@@ -4,9 +4,9 @@
   "private": true,
   "type": "module",
   "exports": {
-    ".": "./src/index.ts",
-    "./client": "./src/client.ts",
-    "./types": "./src/types.ts"
+    ".": "./dist/index.js",
+    "./client": "./dist/client.js",
+    "./types": "./dist/types.js"
   },
   "scripts": {
     "build": "tsc",
