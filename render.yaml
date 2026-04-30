@@ -4,15 +4,16 @@ services:
     runtime: node
     region: oregon
     plan: free
-    nodeVersion: "20"
     buildCommand: corepack enable && pnpm install --frozen-lockfile && pnpm build
     startCommand: cd apps/api && node dist/index.js
     healthCheckPath: /health
     envVars:
+      - key: NODE_VERSION
+        value: "20"
       - key: NODE_ENV
         value: production
       - key: PORT
-        value: 3000
+        value: "3000"
       - key: SUPABASE_URL
         sync: false
       - key: SUPABASE_SERVICE_ROLE_KEY
