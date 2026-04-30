@@ -105,7 +105,7 @@ const styles = StyleSheet.create({
     borderRadius: radius.md,
   },
   activeContainer: {
-    backgroundColor: colors.primaryLight,
+    backgroundColor: colors.surface,
     borderLeftWidth: 3,
     borderLeftColor: colors.primary,
     paddingLeft: spacing.md - 3,
