@@ -22,6 +22,8 @@ export function createAuthRoutes(config: AuthRoutesConfig) {
    */
   app.post('/magic-link', async (c) => {
     const body = await c.req.json<{ email?: string }>()
+    const isProduction = process.env.NODE_ENV === 'production'
+    const hasEmailDelivery = !isProduction || Boolean(process.env.RESEND_API_KEY)
 
     if (!body.email || typeof body.email !== 'string') {
       return c.json(
@@ -47,12 +49,26 @@ export function createAuthRoutes(config: AuthRoutesConfig) {
       )
     }
 
+    if (!hasEmailDelivery) {
+      logger.error({ email }, 'Magic link requested without production email delivery configured')
+      return c.json(
+        {
+          success: false,
+          error: {
+            code: 'EMAIL_NOT_CONFIGURED',
+            message: 'O login por email não está configurado em produção.',
+          },
+        },
+        503
+      )
+    }
+
     try {
       const link = await magicLinkService.sendMagicLink(email)
       logger.info({ email }, 'Magic link sent')
 
       // Em desenvolvimento, retorna o link para facilitar testes
-      const isDev = process.env.NODE_ENV !== 'production'
+      const isDev = !isProduction
 
       return c.json({
         success: true,

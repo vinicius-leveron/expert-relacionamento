@@ -7,6 +7,14 @@ const ACCESS_TOKEN_KEY = 'perpetuo_access_token';
 const REFRESH_TOKEN_KEY = 'perpetuo_refresh_token';
 const USER_KEY = 'perpetuo_user';
 
+let authInvalidationHandler: (() => Promise<void> | void) | null = null;
+
+export function registerAuthInvalidationHandler(
+  handler: (() => Promise<void> | void) | null,
+): void {
+  authInvalidationHandler = handler;
+}
+
 interface ApiResponse<T> {
   data: T;
   status: number;
@@ -46,6 +54,10 @@ class ApiClient {
       storage.removeItem(REFRESH_TOKEN_KEY),
       storage.removeItem(USER_KEY),
     ]);
+
+    if (authInvalidationHandler) {
+      await authInvalidationHandler();
+    }
   }
 
   private async refreshAccessToken(): Promise<boolean> {

@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import { api } from '@/api/client';
+import { api, registerAuthInvalidationHandler } from '@/api/client';
 import { storage } from '@/utils/storage';
 import {
   captureAnalyticsEvent,
@@ -7,6 +7,9 @@ import {
   resetAnalyticsUser,
 } from '@/analytics/posthog';
 import { clearSentryUser, setSentryUser } from '@/monitoring/sentry';
+import { useChatStore } from '@/stores/chat.store';
+import { useConversationsStore } from '@/stores/conversations.store';
+import { useProfileStore } from '@/stores/profile.store';
 
 interface User {
   id: string;
@@ -32,6 +35,31 @@ interface AuthState {
 const ACCESS_TOKEN_KEY = 'perpetuo_access_token';
 const REFRESH_TOKEN_KEY = 'perpetuo_refresh_token';
 const USER_KEY = 'perpetuo_user';
+
+function resetDependentStores(): void {
+  useChatStore.getState().disconnectSSE();
+  useChatStore.setState({
+    messages: [],
+    pendingAttachments: [],
+    conversationId: null,
+    isLoading: false,
+    responseStartedAt: null,
+    isUploadingAttachment: false,
+    isConnected: false,
+    eventSource: null,
+  });
+  useConversationsStore.setState({
+    conversations: [],
+    activeId: null,
+    isLoading: false,
+    error: null,
+  });
+  useProfileStore.setState({
+    profile: null,
+    isLoading: false,
+    error: null,
+  });
+}
 
 export const useAuthStore = create<AuthState>((set, get) => ({
   isAuthenticated: false,
@@ -167,3 +195,16 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     });
   },
 }));
+
+registerAuthInvalidationHandler(() => {
+  resetAnalyticsUser();
+  clearSentryUser();
+  resetDependentStores();
+  useAuthStore.setState({
+    isAuthenticated: false,
+    isLoading: false,
+    user: null,
+    accessToken: null,
+    refreshToken: null,
+  });
+});
