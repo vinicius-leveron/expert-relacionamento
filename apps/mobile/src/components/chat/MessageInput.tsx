@@ -291,7 +291,7 @@ const styles = StyleSheet.create({
   attachmentRemove: {
     width: 24,
     height: 24,
-    borderRadius: 12,
+    borderRadius: radius.full,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -303,13 +303,13 @@ const styles = StyleSheet.create({
   attachmentAction: {
     width: 24,
     height: 24,
-    borderRadius: 12,
+    borderRadius: radius.full,
     alignItems: 'center',
     justifyContent: 'center',
   },
   container: {
     flexDirection: 'row',
-    alignItems: 'flex-end',
+    alignItems: 'center',
     paddingHorizontal: spacing.sm + 4,
     paddingVertical: spacing.sm + 2,
     gap: spacing.sm,
@@ -317,7 +317,7 @@ const styles = StyleSheet.create({
   attachButton: {
     width: sizes.touchMin,
     height: sizes.touchMin,
-    borderRadius: sizes.touchMin / 2,
+    borderRadius: radius.full,
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: colors.gray100,
@@ -325,7 +325,7 @@ const styles = StyleSheet.create({
   audioButton: {
     width: sizes.touchMin,
     height: sizes.touchMin,
-    borderRadius: sizes.touchMin / 2,
+    borderRadius: radius.full,
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: colors.gray100,
@@ -333,7 +333,7 @@ const styles = StyleSheet.create({
   inputWrapper: {
     flex: 1,
     backgroundColor: colors.gray100,
-    borderRadius: radius.xl,
+    borderRadius: radius.lg,
     borderWidth: 1,
     borderColor: 'transparent',
     paddingHorizontal: spacing.md,
@@ -358,7 +358,7 @@ const styles = StyleSheet.create({
   sendButton: {
     width: sizes.touchMin,
     height: sizes.touchMin,
-    borderRadius: sizes.touchMin / 2,
+    borderRadius: radius.full,
     alignItems: 'center',
     justifyContent: 'center',
   },

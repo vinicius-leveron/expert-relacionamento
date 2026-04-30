@@ -566,7 +566,7 @@ const styles = StyleSheet.create({
   audioIcon: {
     width: 34,
     height: 34,
-    borderRadius: 17,
+    borderRadius: radius.full,
     alignItems: 'center',
     justifyContent: 'center',
   },
