@@ -622,7 +622,10 @@ export default function ChatScreen() {
 
         {/* Quick Replies - show only when no messages */}
         {!hasMessages && !isLoading && (
-          <QuickReplies onSelect={handleQuickReply} />
+          <QuickReplies
+            onSelect={handleQuickReply}
+            archetype={profile?.diagnostic?.archetype as 'ansioso' | 'evitante' | 'desorganizado' | 'seguro' | undefined}
+          />
         )}
 
         <MessageInput
@@ -664,7 +667,7 @@ export default function ChatScreen() {
 const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
-    backgroundColor: colors.white,
+    backgroundColor: colors.background,
   },
   container: {
     flex: 1,

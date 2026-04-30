@@ -254,7 +254,7 @@ export function MessageInput({
 
 const styles = StyleSheet.create({
   wrapper: {
-    backgroundColor: colors.white,
+    backgroundColor: colors.surface,
     borderTopWidth: 1,
     borderTopColor: colors.border,
   },

@@ -597,7 +597,7 @@ const styles = StyleSheet.create({
     ...getShadow('sm'),
   },
   assistantBubble: {
-    backgroundColor: colors.white,
+    backgroundColor: colors.surface,
     borderBottomLeftRadius: radius.xs,
     borderWidth: 1,
     borderColor: colors.border,
