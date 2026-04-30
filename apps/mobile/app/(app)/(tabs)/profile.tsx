@@ -1,5 +1,12 @@
 import { useEffect } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity } from 'react-native';
+import {
+  View,
+  Text,
+  StyleSheet,
+  ScrollView,
+  TouchableOpacity,
+  useWindowDimensions,
+} from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import { useProfileStore } from '@/stores/profile.store';
@@ -93,8 +100,16 @@ export default function ProfileScreen() {
   // Calculate journey progress (mock for now)
   const journeyProgress = profile?.diagnostic ? 72 : 25;
 
+  const { width } = useWindowDimensions();
+  const isWideScreen = width > 600;
+
   return (
-    <ScrollView style={styles.container} showsVerticalScrollIndicator={false}>
+    <ScrollView
+      style={styles.container}
+      contentContainerStyle={isWideScreen ? styles.wideContentContainer : undefined}
+      showsVerticalScrollIndicator={false}
+    >
+      <View style={isWideScreen ? styles.wideWrapper : undefined}>
       {/* Profile Header */}
       <ProfileHeader
         name={profile?.displayName ?? user?.email?.split('@')[0]}
@@ -172,6 +187,7 @@ export default function ProfileScreen() {
 
       {/* Version */}
       <Text style={styles.version}>Perpétuo v1.0.0</Text>
+      </View>
     </ScrollView>
   );
 }
@@ -180,6 +196,13 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: colors.gray50,
+  },
+  wideContentContainer: {
+    alignItems: 'center',
+  },
+  wideWrapper: {
+    width: '100%',
+    maxWidth: 480,
   },
   section: {
     paddingHorizontal: spacing.md,
