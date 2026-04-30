@@ -244,6 +244,9 @@ export class SupabaseConversationRepository implements ConversationRepository {
       )
 
       if (linkError) {
+        if (this.isMissingRelationError(linkError.message)) {
+          return this.mapMessage(data, [])
+        }
         throw new Error(`Failed to link message attachments: ${linkError.message}`)
       }
     }
