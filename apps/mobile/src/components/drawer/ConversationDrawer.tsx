@@ -18,7 +18,9 @@ import { useChatStore } from '@/stores/chat.store';
 import { useAuthStore } from '@/stores/auth.store';
 import { NewConversationButton } from './NewConversationButton';
 import { ConversationListItem } from './ConversationListItem';
+import { AgentsList } from './AgentsList';
 import { colors, spacing, typography, getShadow } from '@/theme';
+import type { SpecializedAgent } from '@/data/specialized-agents';
 
 export function ConversationDrawer({ navigation }: DrawerContentComponentProps) {
   const insets = useSafeAreaInsets();
@@ -102,6 +104,29 @@ export function ConversationDrawer({ navigation }: DrawerContentComponentProps) 
     [archiveConversation, activeId, handleSelectConversation, handleNewConversation]
   );
 
+  const handleSelectAgent = useCallback(
+    async (agent: SpecializedAgent) => {
+      try {
+        const newConversation = await createConversation();
+        prepareConversationState(newConversation.id);
+
+        // Atualizar título da conversa com o nome do agente
+        useConversationsStore.getState().updateConversationPreview({
+          id: newConversation.id,
+          summary: agent.name,
+        });
+
+        // Enviar o prompt do agente
+        await chatStore.sendMessage(agent.prompt);
+
+        navigation.closeDrawer();
+      } catch (error) {
+        console.error('Erro ao selecionar agente:', error);
+      }
+    },
+    [createConversation, prepareConversationState, chatStore, navigation]
+  );
+
   const renderItem = ({ item }: { item: Conversation }) => (
     <ConversationListItem
       conversation={item}
@@ -158,6 +183,9 @@ export function ConversationDrawer({ navigation }: DrawerContentComponentProps) 
         onPress={handleNewConversation}
         disabled={isLoading}
       />
+
+      {/* Agents Section */}
+      <AgentsList onSelectAgent={handleSelectAgent} />
 
       {/* Section Title */}
       <Text style={styles.sectionTitle}>Conversas Recentes</Text>
