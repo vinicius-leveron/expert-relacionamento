@@ -139,6 +139,25 @@ if (!process.env.JWT_SECRET) {
 
 // App base URL para magic links
 const APP_BASE_URL = process.env.APP_BASE_URL ?? 'http://localhost:8081'
+const WEB_APP_URL = process.env.WEB_APP_URL
+
+const allowedOrigins = new Set(
+  [
+    'http://localhost:8081',
+    'http://127.0.0.1:8081',
+    'http://localhost:8082',
+    'http://127.0.0.1:8082',
+    'http://localhost:19006',
+    'http://127.0.0.1:19006',
+    'exp://localhost:8081',
+    'exp://127.0.0.1:8081',
+    'https://perpetuo-api-fdrf.onrender.com',
+    WEB_APP_URL,
+  ].filter(Boolean) as string[]
+)
+
+const isAllowedWebOrigin = (origin: string) =>
+  /^https:\/\/expert-relacionamento(?:-[a-z0-9-]+)*\.vercel\.app$/.test(origin)
 
 async function main() {
   let userRepo: UserRepository
@@ -217,17 +236,13 @@ async function main() {
   app.use(
     '/api/*',
     cors({
-      origin: [
-        'http://localhost:8081',
-        'http://127.0.0.1:8081',
-        'http://localhost:8082',
-        'http://127.0.0.1:8082',
-        'http://localhost:19006',
-        'http://127.0.0.1:19006',
-        'exp://localhost:8081',
-        'exp://127.0.0.1:8081',
-        'https://perpetuo-api-fdrf.onrender.com',
-      ],
+      origin: (origin) => {
+        if (allowedOrigins.has(origin) || isAllowedWebOrigin(origin)) {
+          return origin
+        }
+
+        return null
+      },
       allowMethods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
       allowHeaders: ['Content-Type', 'Authorization'],
       credentials: true,
