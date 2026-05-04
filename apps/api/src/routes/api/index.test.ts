@@ -4,6 +4,7 @@ import { User, type JwtService, type MagicLinkService, type UserRepository, type
 import type {
   Conversation,
   Message,
+  SupabaseAvatarProfileRepository,
   SupabaseConversationRepository,
   SupabaseDiagnosticRepository,
   SupabaseSessionRepository,
@@ -19,6 +20,7 @@ function createConversation(overrides: Partial<Conversation> = {}): Conversation
     userId: 'user-1',
     channel: 'app',
     status: 'active',
+    metadata: undefined,
     createdAt: new Date('2026-04-29T12:00:00.000Z'),
     updatedAt: new Date('2026-04-29T12:00:00.000Z'),
     messages: [],
@@ -55,12 +57,31 @@ function createConversationRepo(params?: {
   messages?: Message[]
   conversations?: Conversation[]
   onArchive?: (conversationId: string) => Promise<void> | void
+  onCreate?: (params: {
+    userId: string
+    channel: string
+    metadata?: Record<string, unknown>
+  }) => Promise<void> | void
 }): SupabaseConversationRepository {
   const conversation = params?.conversation ?? createConversation()
   const messages = params?.messages ?? []
   const conversations = params?.conversations ?? (conversation ? [conversation] : [])
 
   return {
+    create: vi.fn(
+      async (createParams: {
+        userId: string
+        channel: string
+        metadata?: Record<string, unknown>
+      }) => {
+        await params?.onCreate?.(createParams)
+        return createConversation({
+          userId: createParams.userId,
+          channel: createParams.channel,
+          metadata: createParams.metadata,
+        })
+      },
+    ),
     findByUserId: vi.fn(async (userId: string) =>
       conversations.filter((item) => item.userId === userId),
     ),
@@ -72,6 +93,43 @@ function createConversationRepo(params?: {
       await params?.onArchive?.(conversationId)
     }),
   } as unknown as SupabaseConversationRepository
+}
+
+function createAvatarProfileRepo(params?: {
+  avatarProfile?: {
+    status: 'not_started' | 'in_progress' | 'completed'
+    currentPhase: number | null
+    completedPhases: number[]
+    updatedAt?: Date
+  } | null
+}) {
+  return {
+    getByUserId: vi.fn(async () =>
+      params?.avatarProfile
+        ? {
+            id: 'avatar-profile-1',
+            userId: 'user-1',
+            status: params.avatarProfile.status,
+            currentPhase: params.avatarProfile.currentPhase,
+            completedPhases: params.avatarProfile.completedPhases,
+            phaseData: {},
+            profileSummary: {
+              identity: { selfImage: '', idealSelf: '', mainConflict: '' },
+              socialRomanticPatterns: [],
+              strengths: [],
+              blockers: [],
+              values: [],
+              goals90d: [],
+              executionRisks: [],
+              recommendedNextFocus: '',
+            },
+            sourceConversationId: null,
+            createdAt: new Date('2026-04-29T12:00:00.000Z'),
+            updatedAt: params.avatarProfile.updatedAt ?? new Date('2026-04-29T12:00:00.000Z'),
+          }
+        : null,
+    ),
+  } as unknown as SupabaseAvatarProfileRepository
 }
 
 function createAttachmentStorage(overrides?: Partial<ChatAttachmentStorageService>) {
@@ -135,6 +193,7 @@ function createRoutes(params?: {
   conversationRepo?: SupabaseConversationRepository
   diagnosticRepo?: SupabaseDiagnosticRepository
   subscriptionRepo?: SupabaseSubscriptionRepository
+  avatarProfileRepo?: SupabaseAvatarProfileRepository
   attachmentStorage?: ChatAttachmentStorageService
   appPipeline?: MessagePipeline
   paymentUrl?: string
@@ -150,6 +209,7 @@ function createRoutes(params?: {
     conversationRepo: params?.conversationRepo,
     diagnosticRepo: params?.diagnosticRepo,
     subscriptionRepo: params?.subscriptionRepo,
+    avatarProfileRepo: params?.avatarProfileRepo,
     attachmentStorage: params?.attachmentStorage,
     appPipeline: params?.appPipeline,
     paymentUrl: params?.paymentUrl,
@@ -164,6 +224,7 @@ describe('createApiRoutes image chat flow', () => {
         createConversation({
           id: 'conversation-1',
           summary: 'Conversa sobre limites e comunicação afetiva',
+          metadata: { agentId: 'diagnostic' },
         }),
       ],
     })
@@ -183,6 +244,7 @@ describe('createApiRoutes image chat flow', () => {
         {
           id: 'conversation-1',
           summary: 'Conversa sobre limites e comunicação afetiva',
+          metadata: { agentId: 'diagnostic' },
         },
       ],
     })
@@ -202,6 +264,13 @@ describe('createApiRoutes image chat flow', () => {
     const app = createRoutes({
       diagnosticRepo,
       subscriptionRepo,
+      avatarProfileRepo: createAvatarProfileRepo({
+        avatarProfile: {
+          status: 'completed',
+          currentPhase: null,
+          completedPhases: [1, 2, 3, 4, 5, 6, 7],
+        },
+      }),
       paymentUrl: 'https://perpetuo.com.br/assinar',
     })
 
@@ -219,6 +288,11 @@ describe('createApiRoutes image chat flow', () => {
         email: 'user@example.com',
         displayName: null,
         avatarUrl: null,
+        avatarProfile: {
+          status: 'completed',
+          currentPhase: null,
+          completedPhases: [1, 2, 3, 4, 5, 6, 7],
+        },
         subscription: null,
         access: {
           diagnosisCompleted: true,
@@ -226,6 +300,7 @@ describe('createApiRoutes image chat flow', () => {
           hasChatAccess: false,
           hasJourneyAccess: false,
           canAnalyzeImages: false,
+          hasStructuredDiagnosis: true,
         },
         commerce: {
           checkoutUrl: 'https://perpetuo.com.br/assinar',
@@ -259,6 +334,100 @@ describe('createApiRoutes image chat flow', () => {
       data: {
         displayName: 'Vinicius Oliveira',
         avatarUrl: null,
+      },
+    })
+  })
+
+  it('cria conversa com metadata.agentId', async () => {
+    const conversationRepo = createConversationRepo()
+    const app = createRoutes({ conversationRepo })
+
+    const response = await app.request('http://localhost/conversations', {
+      method: 'POST',
+      headers: {
+        Authorization: 'Bearer test-token',
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        metadata: {
+          agentId: 'diagnostic',
+        },
+      }),
+    })
+
+    expect(response.status).toBe(200)
+    expect(await response.json()).toMatchObject({
+      success: true,
+      data: {
+        metadata: {
+          agentId: 'diagnostic',
+        },
+      },
+    })
+  })
+
+  it('bloqueia criação de conversa derivada sem diagnóstico estruturado completo', async () => {
+    const conversationRepo = createConversationRepo()
+    const app = createRoutes({
+      conversationRepo,
+      avatarProfileRepo: createAvatarProfileRepo({
+        avatarProfile: {
+          status: 'in_progress',
+          currentPhase: 3,
+          completedPhases: [1, 2],
+        },
+      }),
+    })
+
+    const response = await app.request('http://localhost/conversations', {
+      method: 'POST',
+      headers: {
+        Authorization: 'Bearer test-token',
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        metadata: {
+          agentId: 'vsm',
+        },
+      }),
+    })
+
+    expect(response.status).toBe(409)
+    expect(await response.json()).toMatchObject({
+      success: false,
+      error: {
+        code: 'DIAGNOSIS_REQUIRED',
+      },
+    })
+  })
+
+  it('mapeia diagnosis_required do pipeline para DIAGNOSIS_REQUIRED na API', async () => {
+    const conversationRepo = createConversationRepo()
+    const appPipeline = createAppPipeline({
+      processAppMessage: vi.fn(async () => ({ success: false, error: 'diagnosis_required' })),
+    })
+    const app = createRoutes({
+      conversationRepo,
+      attachmentStorage: createAttachmentStorage(),
+      appPipeline,
+    })
+
+    const response = await app.request('http://localhost/conversations/conversation-1/messages', {
+      method: 'POST',
+      headers: {
+        Authorization: 'Bearer test-token',
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        content: 'oi',
+      }),
+    })
+
+    expect(response.status).toBe(409)
+    expect(await response.json()).toMatchObject({
+      success: false,
+      error: {
+        code: 'DIAGNOSIS_REQUIRED',
       },
     })
   })

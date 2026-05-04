@@ -61,6 +61,13 @@ export {
   // Image Analysis
   IMAGE_ANALYSIS_PROMPT,
   IMAGE_ANALYSIS_SYSTEM_ADDITION,
+  AGENT_IDS,
+  AGENT_PROMPT_REGISTRY,
+  agentRequiresStructuredDiagnosis,
+  getAgentSystemPrompt,
+  isAgentId,
+  type AgentId,
+  type AgentPromptDefinition,
 } from './prompts/index.js'
 
 // Diagnostic Service

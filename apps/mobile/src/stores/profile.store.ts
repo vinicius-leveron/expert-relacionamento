@@ -25,12 +25,20 @@ export interface Access {
   hasChatAccess: boolean;
   hasJourneyAccess: boolean;
   canAnalyzeImages: boolean;
+  hasStructuredDiagnosis: boolean;
 }
 
 export interface Commerce {
   checkoutUrl: string | null;
   nativeCheckoutMode: 'external_link' | 'blocked';
   canUpgrade: boolean;
+}
+
+export interface AvatarProfile {
+  status: 'not_started' | 'in_progress' | 'completed';
+  currentPhase: number | null;
+  completedPhases: number[];
+  updatedAt: string;
 }
 
 export interface Profile {
@@ -41,6 +49,7 @@ export interface Profile {
   avatarUrl: string | null;
   createdAt: string;
   diagnostic: Diagnostic | null;
+  avatarProfile: AvatarProfile | null;
   subscription: Subscription | null;
   access: Access;
   commerce: Commerce;

@@ -16,3 +16,13 @@ export {
 export { getJourneyPrompt, buildDirectionalPlan, DAILY_CHECKIN, type JourneyDay } from './journey.js'
 
 export { IMAGE_ANALYSIS_PROMPT, IMAGE_ANALYSIS_SYSTEM_ADDITION } from './image-analysis.js'
+
+export {
+  AGENT_IDS,
+  AGENT_PROMPT_REGISTRY,
+  agentRequiresStructuredDiagnosis,
+  getAgentSystemPrompt,
+  isAgentId,
+  type AgentId,
+  type AgentPromptDefinition,
+} from './agents.js'

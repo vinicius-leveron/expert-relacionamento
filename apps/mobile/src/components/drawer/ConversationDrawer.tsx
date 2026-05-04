@@ -5,6 +5,7 @@ import {
   FlatList,
   StyleSheet,
   ActivityIndicator,
+  Alert,
   TouchableOpacity,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -16,6 +17,7 @@ import {
 } from '@/stores/conversations.store';
 import { useChatStore } from '@/stores/chat.store';
 import { useAuthStore } from '@/stores/auth.store';
+import { useProfileStore } from '@/stores/profile.store';
 import { NewConversationButton } from './NewConversationButton';
 import { ConversationListItem } from './ConversationListItem';
 import { AgentsList } from './AgentsList';
@@ -36,6 +38,7 @@ export function ConversationDrawer({ navigation }: DrawerContentComponentProps) 
 
   const chatStore = useChatStore();
   const { accessToken } = useAuthStore();
+  const { profile, fetchProfile } = useProfileStore();
 
   useEffect(() => {
     fetchConversations();
@@ -107,7 +110,20 @@ export function ConversationDrawer({ navigation }: DrawerContentComponentProps) 
   const handleSelectAgent = useCallback(
     async (agent: SpecializedAgent) => {
       try {
-        const newConversation = await createConversation();
+        const currentProfile = profile ?? (await fetchProfile());
+        const hasStructuredDiagnosis = currentProfile?.access.hasStructuredDiagnosis === true;
+
+        if (agent.requiresStructuredDiagnosis && !hasStructuredDiagnosis) {
+          Alert.alert(
+            'Diagnóstico necessário',
+            'Conclua o Diagnóstico Pessoal antes de usar este agente.',
+          );
+          return;
+        }
+
+        const newConversation = await createConversation({
+          metadata: { agentId: agent.id },
+        });
         prepareConversationState(newConversation.id);
 
         // Atualizar título da conversa com o nome do agente
@@ -118,13 +134,15 @@ export function ConversationDrawer({ navigation }: DrawerContentComponentProps) 
 
         // Enviar o prompt do agente
         await chatStore.sendMessage(agent.prompt);
+        await fetchProfile();
 
         navigation.closeDrawer();
       } catch (error) {
         console.error('Erro ao selecionar agente:', error);
+        Alert.alert('Erro', 'Não foi possível abrir este agente agora.');
       }
     },
-    [createConversation, prepareConversationState, chatStore, navigation]
+    [createConversation, prepareConversationState, chatStore, fetchProfile, navigation, profile]
   );
 
   const renderItem = ({ item }: { item: Conversation }) => (

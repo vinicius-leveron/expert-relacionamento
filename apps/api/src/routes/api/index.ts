@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto'
 import { extname } from 'node:path'
 import { Hono, type Context } from 'hono'
+import { agentRequiresStructuredDiagnosis, isAgentId } from '@perpetuo/ai-gateway'
 import type {
   JwtService,
   MagicLinkService,
@@ -11,6 +12,7 @@ import type {
 import type {
   AttachmentRepository,
   SupabaseConversationRepository,
+  SupabaseAvatarProfileRepository,
   SupabaseDiagnosticRepository,
   SupabaseSessionRepository,
   SupabaseSubscriptionRepository,
@@ -150,6 +152,7 @@ export interface ApiRoutesConfig {
   conversationRepo?: SupabaseConversationRepository
   attachmentRepo?: AttachmentRepository
   attachmentStorage?: ChatAttachmentStorageService
+  avatarProfileRepo?: SupabaseAvatarProfileRepository
   diagnosticRepo?: SupabaseDiagnosticRepository
   subscriptionRepo?: SupabaseSubscriptionRepository
   messageEmitter?: MessageEmitter
@@ -175,6 +178,7 @@ export function createApiRoutes(config: ApiRoutesConfig) {
     conversationRepo,
     attachmentRepo,
     attachmentStorage,
+    avatarProfileRepo,
     diagnosticRepo,
     subscriptionRepo,
     messageEmitter,
@@ -236,7 +240,9 @@ export function createApiRoutes(config: ApiRoutesConfig) {
   const buildProfileResponse = async (userId: string, user: User) => {
     const diagnostic = diagnosticRepo ? await diagnosticRepo.getByUserId(userId) : null
     const subscription = subscriptionRepo ? await subscriptionRepo.getLatestByUserId(userId) : null
+    const avatarProfile = avatarProfileRepo ? await avatarProfileRepo.getByUserId(userId) : null
     const diagnosisCompleted = diagnostic !== null
+    const hasStructuredDiagnosis = avatarProfile?.status === 'completed'
     const hasActiveSubscription = subscription?.status === 'active'
     const subscriptionCheckEnabled = subscriptionRepo !== undefined
     const hasChatAccess = !subscriptionCheckEnabled || hasActiveSubscription
@@ -268,6 +274,14 @@ export function createApiRoutes(config: ApiRoutesConfig) {
             completedAt: diagnostic.completedAt,
           }
         : null,
+      avatarProfile: avatarProfile
+        ? {
+            status: avatarProfile.status,
+            currentPhase: avatarProfile.currentPhase,
+            completedPhases: avatarProfile.completedPhases,
+            updatedAt: avatarProfile.updatedAt.toISOString(),
+          }
+        : null,
       subscription: subscription
         ? {
             status: subscription.status,
@@ -281,6 +295,7 @@ export function createApiRoutes(config: ApiRoutesConfig) {
         hasChatAccess,
         hasJourneyAccess,
         canAnalyzeImages,
+        hasStructuredDiagnosis,
       },
       commerce: {
         checkoutUrl: paymentUrl ?? null,
@@ -552,6 +567,7 @@ export function createApiRoutes(config: ApiRoutesConfig) {
           channel: conv.channel,
           status: conv.status,
           summary: conv.summary ?? null,
+          metadata: conv.metadata ?? null,
           createdAt: conv.createdAt.toISOString(),
           updatedAt: conv.updatedAt.toISOString(),
         })),
@@ -1154,6 +1170,30 @@ export function createApiRoutes(config: ApiRoutesConfig) {
       pipelineDelegated = true
 
       if (!pipelineResult.success) {
+        if (pipelineResult.error === 'diagnosis_required') {
+          const uploadedInlineMediaPath = uploadedInlineImagePath ?? uploadedInlineAudioPath
+
+          if (uploadedInlineMediaPath && attachmentStorage) {
+            await attachmentStorage.removeObject(uploadedInlineMediaPath).catch((cleanupError) => {
+              logger.warn(
+                { cleanupError, userId, conversationId, uploadedInlineMediaPath },
+                'Failed to cleanup inline media after diagnosis gate',
+              )
+            })
+          }
+
+          return c.json(
+            {
+              success: false,
+              error: {
+                code: 'DIAGNOSIS_REQUIRED',
+                message: 'Conclua o Diagnóstico Pessoal antes de usar este agente.',
+              },
+            },
+            409,
+          )
+        }
+
         logger.error(
           {
             userId,
@@ -1502,9 +1542,47 @@ export function createApiRoutes(config: ApiRoutesConfig) {
     }
 
     try {
+      let body: { metadata?: { agentId?: unknown } } = {}
+      if (c.req.header('content-type')?.includes('application/json')) {
+        body = await c.req.json<{ metadata?: { agentId?: unknown } }>().catch(
+          () => ({ metadata: undefined }),
+        )
+      }
+      const requestedAgentId = body.metadata?.agentId
+
+      if (requestedAgentId !== undefined && !isAgentId(requestedAgentId)) {
+        return c.json(
+          {
+            success: false,
+            error: { code: 'VALIDATION_ERROR', message: 'metadata.agentId inválido' },
+          },
+          400,
+        )
+      }
+
+      const agentId = isAgentId(requestedAgentId) ? requestedAgentId : undefined
+
+      if (
+        agentId &&
+        agentRequiresStructuredDiagnosis(agentId) &&
+        (await avatarProfileRepo?.getByUserId(userId))?.status !== 'completed'
+      ) {
+        return c.json(
+          {
+            success: false,
+            error: {
+              code: 'DIAGNOSIS_REQUIRED',
+              message: 'Conclua o Diagnóstico Pessoal antes de abrir este agente.',
+            },
+          },
+          409,
+        )
+      }
+
       const conversation = await conversationRepo.create({
         userId,
         channel: 'app',
+        metadata: agentId ? { agentId } : undefined,
       })
 
       return c.json({
@@ -1514,6 +1592,7 @@ export function createApiRoutes(config: ApiRoutesConfig) {
           channel: conversation.channel,
           status: conversation.status,
           summary: conversation.summary ?? null,
+          metadata: conversation.metadata ?? null,
           createdAt: conversation.createdAt.toISOString(),
           updatedAt: conversation.updatedAt.toISOString(),
         },

@@ -10,6 +10,10 @@ export interface UserContext {
   subscriptionOfferUrl?: string
   hasRagAccess?: boolean
   canAnalyzeImages?: boolean
+  hasStructuredDiagnosis?: boolean
+  structuredDiagnosisStatus?: 'not_started' | 'in_progress' | 'completed'
+  structuredDiagnosisCurrentPhase?: number | null
+  avatarProfileContext?: string
   // Rate limiting de imagens (20/mês)
   imageAnalysisUsedThisMonth?: number
   imageAnalysisLimit?: number
@@ -126,6 +130,20 @@ export class ContextBuilder {
       contextLines.push('Diagnóstico: Ainda não feito')
     }
 
+    if (context.hasStructuredDiagnosis !== undefined) {
+      contextLines.push(
+        `Diagnóstico estruturado: ${context.hasStructuredDiagnosis ? 'SIM' : 'NÃO'}`,
+      )
+    }
+
+    if (context.structuredDiagnosisStatus) {
+      contextLines.push(`Status diagnóstico estruturado: ${context.structuredDiagnosisStatus}`)
+    }
+
+    if (typeof context.structuredDiagnosisCurrentPhase === 'number') {
+      contextLines.push(`Fase atual do diagnóstico estruturado: ${context.structuredDiagnosisCurrentPhase}/7`)
+    }
+
     // Status de assinatura e capacidades pós-diagnóstico
     if (context.diagnosisCompleted && context.hasActiveSubscription === true) {
       contextLines.push('Assinatura: ATIVA')
@@ -174,6 +192,13 @@ export class ContextBuilder {
       sections.push(`---
 CONTEXTO DO USUÁRIO:
 ${contextLines.join('\n')}
+---`)
+    }
+
+    if (context.avatarProfileContext) {
+      sections.push(`---
+MEMÓRIA CENTRAL DO AVATAR:
+${context.avatarProfileContext}
 ---`)
     }
 

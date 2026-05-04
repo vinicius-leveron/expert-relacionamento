@@ -1,5 +1,10 @@
 import { create } from 'zustand';
 import { api } from '@/api/client';
+import type { AgentId } from '@/data/specialized-agents';
+
+export interface ConversationMetadata {
+  agentId?: AgentId;
+}
 
 export interface Conversation {
   id: string;
@@ -7,6 +12,7 @@ export interface Conversation {
   channel: string;
   status: 'active' | 'archived';
   summary?: string;
+  metadata?: ConversationMetadata;
   createdAt: string;
   updatedAt: string;
 }
@@ -18,7 +24,9 @@ interface ConversationsState {
   error: string | null;
 
   fetchConversations: () => Promise<void>;
-  createConversation: () => Promise<Conversation>;
+  createConversation: (params?: {
+    metadata?: ConversationMetadata;
+  }) => Promise<Conversation>;
   selectConversation: (id: string) => void;
   archiveConversation: (id: string) => Promise<void>;
   setActiveId: (id: string | null) => void;
@@ -37,6 +45,7 @@ interface ConversationsResponse {
     channel: string;
     status: 'active' | 'archived';
     summary?: string;
+    metadata?: ConversationMetadata | null;
     createdAt: string;
     updatedAt: string;
   }>;
@@ -48,6 +57,7 @@ interface CreateConversationResponse {
     id: string;
     channel: string;
     status: 'active' | 'archived';
+    metadata?: ConversationMetadata | null;
     createdAt: string;
     updatedAt: string;
   };
@@ -103,6 +113,7 @@ export const useConversationsStore = create<ConversationsState>((set, get) => ({
           channel: c.channel,
           status: c.status,
           summary: c.summary,
+          metadata: c.metadata ?? undefined,
           createdAt: c.createdAt,
           updatedAt: c.updatedAt,
         }))
@@ -125,12 +136,13 @@ export const useConversationsStore = create<ConversationsState>((set, get) => ({
     }
   },
 
-  createConversation: async () => {
+  createConversation: async (params) => {
     set({ isLoading: true, error: null });
 
     try {
       const response = await api.post<CreateConversationResponse>(
-        '/conversations'
+        '/conversations',
+        params?.metadata ? { metadata: params.metadata } : undefined,
       );
 
       if (!response.data.success) {
@@ -142,6 +154,7 @@ export const useConversationsStore = create<ConversationsState>((set, get) => ({
         title: 'Nova conversa',
         channel: response.data.data.channel,
         status: response.data.data.status,
+        metadata: response.data.data.metadata ?? undefined,
         createdAt: response.data.data.createdAt,
         updatedAt: response.data.data.updatedAt,
       };

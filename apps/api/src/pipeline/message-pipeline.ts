@@ -1,13 +1,17 @@
 import {
   ATTACHMENT_CITATION_SYSTEM_ADDITION,
   type AttachmentRAGService,
+  agentRequiresStructuredDiagnosis,
+  type AgentId,
   type Archetype,
   ContextBuilder,
   type ConversationHistory,
   DIAGNOSIS_INTRO,
+  getAgentSystemPrompt,
   IMAGE_ANALYSIS_SYSTEM_ADDITION,
   ISABELA_GREETING,
   ISABELA_RETURNING,
+  isAgentId,
   type RAGService,
   type UserContext,
   getJourneyPrompt,
@@ -23,11 +27,17 @@ import type {
 import { IdentityResolver } from '@perpetuo/core'
 import type {
   AttachmentRepository,
+  AvatarPhaseSnapshot,
+  AvatarProfile,
+  AvatarProfileRepository,
+  AvatarProfileStatus,
+  AvatarProfileSummary,
   ConversationRepository,
   Conversation,
   DiagnosticRepository,
   SubscriptionRepository,
 } from '@perpetuo/database'
+import { createEmptyAvatarProfileSummary } from '@perpetuo/database'
 import type { Logger } from 'pino'
 import { DiagnosticHandler } from './diagnostic-handler.js'
 
@@ -61,6 +71,7 @@ export interface PipelineDependencies {
   transcriber?: TranscriptionService
   conversationRepo?: ConversationRepository
   attachmentRepo?: AttachmentRepository
+  avatarProfileRepo?: AvatarProfileRepository
   diagnosticRepo?: DiagnosticRepository
   subscriptionRepo?: SubscriptionRepository
   inlineImageStorage?: {
@@ -68,6 +79,22 @@ export interface PipelineDependencies {
   }
   /** URL para redirecionamento de pagamento */
   paymentUrl?: string
+}
+
+interface AvatarProfileUpdatePayload {
+  kind: 'avatar_profile_update'
+  agentId?: string
+  status: AvatarProfileStatus
+  currentPhase: number | null
+  completedPhases: number[]
+  phaseUpdate?: {
+    phase: number
+    title?: string
+    summary: string
+    extractedSignals: string[]
+    rawAnswers: string[]
+  }
+  profileSummary: AvatarProfileSummary
 }
 
 export interface AppMessageParams {
@@ -190,6 +217,7 @@ export class MessagePipeline {
       attachmentIds?: string[]
       contentProvided?: boolean
       onUserMessageSaved?: () => void
+      userContextOverride?: UserContext
     } = {},
   ): Promise<string> {
     // Busca/cria conversa e contexto do usuário
@@ -199,7 +227,7 @@ export class MessagePipeline {
         ? await this.deps.conversationRepo.getOrCreateActive(user.id, message.channelType)
         : null
 
-    const userContext = await this.buildUserContext(user)
+    const userContext = options.userContextOverride ?? await this.buildUserContext(user)
 
     // Extrai conteúdo da mensagem
     const { text: messageText, contentBlocks } = await this.extractMessageContent(message)
@@ -288,9 +316,11 @@ Os arquivos enviados nesta conversa estão bloqueados até a assinatura ativa. N
     const effectiveContent =
       hasImage && !canAnalyzeImage ? messageText : (contentBlocks ?? messageText)
 
+    const conversationAgentId = this.getConversationAgentId(conversation)
+
     // Seleciona prompt e monta contexto
     const systemPrompt = [
-      this.selectSystemPrompt(userContext, history, hasImage && canAnalyzeImage),
+      this.selectSystemPrompt(userContext, history, hasImage && canAnalyzeImage, conversation),
       attachmentContext.context ? ATTACHMENT_CITATION_SYSTEM_ADDITION : undefined,
     ]
       .filter((value): value is string => Boolean(value))
@@ -334,8 +364,18 @@ Os arquivos enviados nesta conversa estão bloqueados até a assinatura ativa. N
       throw error
     }
 
-    // Processa diagnóstico se IA indicou conclusão
-    const finalContent = await this.processDiagnosisIfComplete(user, result.content, history)
+    // Preserva o fluxo legado só para conversas sem agente especializado.
+    const contentBeforeStateExtraction = conversationAgentId
+      ? result.content
+      : await this.processDiagnosisIfComplete(user, result.content, history)
+    const {
+      content: finalContent,
+      profileUpdate,
+    } = this.extractAvatarProfileUpdate(contentBeforeStateExtraction)
+
+    if (conversationAgentId === 'diagnostic' && profileUpdate) {
+      await this.persistStructuredAvatarState(user.id, conversation?.id, profileUpdate)
+    }
 
     // Salva resposta da IA (com conteúdo processado)
     await this.saveAIResponse(conversation?.id, { ...result, content: finalContent })
@@ -725,8 +765,22 @@ Os arquivos enviados nesta conversa estão bloqueados até a assinatura ativa. N
       userId: user.id,
       diagnosisCompleted: false,
       currentDayInJourney: 0,
+      hasStructuredDiagnosis: false,
+      structuredDiagnosisStatus: 'not_started',
+      structuredDiagnosisCurrentPhase: null,
       imageAnalysisLimit: 20,
       subscriptionOfferUrl: this.deps.paymentUrl,
+    }
+
+    const avatarProfile = this.deps.avatarProfileRepo
+      ? await this.deps.avatarProfileRepo.getByUserId(user.id)
+      : null
+
+    if (avatarProfile) {
+      context.hasStructuredDiagnosis = avatarProfile.status === 'completed'
+      context.structuredDiagnosisStatus = avatarProfile.status
+      context.structuredDiagnosisCurrentPhase = avatarProfile.currentPhase
+      context.avatarProfileContext = this.formatAvatarProfileContext(avatarProfile)
     }
 
     // Busca diagnóstico
@@ -873,6 +927,264 @@ Os arquivos enviados nesta conversa estão bloqueados até a assinatura ativa. N
     }
   }
 
+  private getConversationAgentId(conversation: Conversation | null): AgentId | undefined {
+    const candidate = conversation?.metadata?.agentId
+    return isAgentId(candidate) ? candidate : undefined
+  }
+
+  private extractAvatarProfileUpdate(content: string): {
+    content: string
+    profileUpdate: AvatarProfileUpdatePayload | null
+  } {
+    const pattern = /\[\[PERPETUO_STATE\]\]([\s\S]*?)\[\[\/PERPETUO_STATE\]\]/
+    const match = pattern.exec(content)
+    const cleanedContent = content.replace(pattern, '').trim()
+
+    if (!match?.[1]) {
+      return {
+        content: content.trim(),
+        profileUpdate: null,
+      }
+    }
+
+    try {
+      const parsed = JSON.parse(match[1].trim()) as Record<string, unknown>
+      const status = parsed.status
+
+      if (
+        parsed.kind !== 'avatar_profile_update' ||
+        (status !== 'not_started' && status !== 'in_progress' && status !== 'completed')
+      ) {
+        return { content: cleanedContent, profileUpdate: null }
+      }
+
+      const completedPhases = Array.isArray(parsed.completedPhases)
+        ? [...new Set(parsed.completedPhases.filter((value): value is number => typeof value === 'number'))]
+            .filter((value) => value >= 1 && value <= 7)
+            .sort((left, right) => left - right)
+        : []
+
+      const currentPhase =
+        typeof parsed.currentPhase === 'number' && parsed.currentPhase >= 1 && parsed.currentPhase <= 7
+          ? parsed.currentPhase
+          : null
+
+      const phaseUpdateValue = parsed.phaseUpdate
+      const phaseUpdateRecord =
+        phaseUpdateValue &&
+        typeof phaseUpdateValue === 'object' &&
+        !Array.isArray(phaseUpdateValue)
+          ? (phaseUpdateValue as Record<string, unknown>)
+          : null
+      const phaseUpdate =
+        phaseUpdateRecord && typeof phaseUpdateRecord.phase === 'number'
+          ? {
+              phase: phaseUpdateRecord.phase,
+              title: typeof phaseUpdateRecord.title === 'string' ? phaseUpdateRecord.title : undefined,
+              summary: typeof phaseUpdateRecord.summary === 'string' ? phaseUpdateRecord.summary : '',
+              extractedSignals: this.coerceStringArray(phaseUpdateRecord.extractedSignals),
+              rawAnswers: this.coerceStringArray(phaseUpdateRecord.rawAnswers),
+            }
+          : undefined
+
+      return {
+        content: cleanedContent,
+        profileUpdate: {
+          kind: 'avatar_profile_update',
+          agentId: typeof parsed.agentId === 'string' ? parsed.agentId : undefined,
+          status,
+          currentPhase,
+          completedPhases,
+          phaseUpdate,
+          profileSummary: this.normalizeAvatarProfileSummary(parsed.profileSummary),
+        },
+      }
+    } catch (error) {
+      this.deps.logger.warn({ error }, 'Failed to parse structured avatar state block')
+      return { content: cleanedContent, profileUpdate: null }
+    }
+  }
+
+  private async persistStructuredAvatarState(
+    userId: string,
+    conversationId: string | undefined,
+    payload: AvatarProfileUpdatePayload,
+  ): Promise<void> {
+    if (!this.deps.avatarProfileRepo) {
+      return
+    }
+
+    try {
+      const currentProfile = await this.deps.avatarProfileRepo.getByUserId(userId)
+      await this.deps.avatarProfileRepo.upsert(
+        this.applyAvatarProfileUpdate(userId, currentProfile, payload, conversationId),
+      )
+    } catch (error) {
+      this.deps.logger.warn(
+        { error, userId, conversationId },
+        'Failed to persist structured avatar profile update',
+      )
+    }
+  }
+
+  private applyAvatarProfileUpdate(
+    userId: string,
+    currentProfile: AvatarProfile | null,
+    payload: AvatarProfileUpdatePayload,
+    conversationId: string | undefined,
+  ): {
+    status: AvatarProfileStatus
+    currentPhase: number | null
+    completedPhases: number[]
+    phaseData: Record<string, AvatarPhaseSnapshot>
+    profileSummary: AvatarProfileSummary
+    sourceConversationId?: string | null
+    userId: string
+  } {
+    const existingSummary = currentProfile?.profileSummary ?? createEmptyAvatarProfileSummary()
+    const phaseData = { ...(currentProfile?.phaseData ?? {}) }
+    const nextCompletedPhases = [
+      ...new Set([...(currentProfile?.completedPhases ?? []), ...payload.completedPhases]),
+    ].sort((left, right) => left - right)
+
+    if (payload.phaseUpdate) {
+      phaseData[`phase${payload.phaseUpdate.phase}`] = {
+        title: payload.phaseUpdate.title,
+        summary: payload.phaseUpdate.summary,
+        extractedSignals: payload.phaseUpdate.extractedSignals,
+        rawAnswers: payload.phaseUpdate.rawAnswers,
+        updatedAt: new Date().toISOString(),
+      }
+    }
+
+    return {
+      userId,
+      status: payload.status,
+      currentPhase: payload.currentPhase,
+      completedPhases: nextCompletedPhases,
+      phaseData,
+      profileSummary: this.mergeAvatarProfileSummary(existingSummary, payload.profileSummary),
+      sourceConversationId: conversationId ?? currentProfile?.sourceConversationId ?? null,
+    }
+  }
+
+  private normalizeAvatarProfileSummary(value: unknown): AvatarProfileSummary {
+    const emptySummary = createEmptyAvatarProfileSummary()
+    if (!value || typeof value !== 'object' || Array.isArray(value)) {
+      return emptySummary
+    }
+
+    const record = value as Record<string, unknown>
+    const identityValue = record.identity
+    const identity =
+      identityValue && typeof identityValue === 'object' && !Array.isArray(identityValue)
+        ? (identityValue as Record<string, unknown>)
+        : {}
+
+    return {
+      identity: {
+        selfImage: typeof identity.selfImage === 'string' ? identity.selfImage : '',
+        idealSelf: typeof identity.idealSelf === 'string' ? identity.idealSelf : '',
+        mainConflict: typeof identity.mainConflict === 'string' ? identity.mainConflict : '',
+      },
+      socialRomanticPatterns: this.coerceStringArray(record.socialRomanticPatterns),
+      strengths: this.coerceStringArray(record.strengths),
+      blockers: this.coerceStringArray(record.blockers),
+      values: this.coerceStringArray(record.values),
+      goals90d: this.coerceStringArray(record.goals90d),
+      executionRisks: this.coerceStringArray(record.executionRisks),
+      recommendedNextFocus:
+        typeof record.recommendedNextFocus === 'string' ? record.recommendedNextFocus : '',
+    }
+  }
+
+  private mergeAvatarProfileSummary(
+    current: AvatarProfileSummary,
+    incoming: AvatarProfileSummary,
+  ): AvatarProfileSummary {
+    const pickString = (baseValue: string, nextValue: string) =>
+      nextValue.trim().length > 0 ? nextValue.trim() : baseValue
+    const pickArray = (baseValue: string[], nextValue: string[]) =>
+      nextValue.length > 0 ? [...new Set(nextValue.map((item) => item.trim()).filter(Boolean))] : baseValue
+
+    return {
+      identity: {
+        selfImage: pickString(current.identity.selfImage, incoming.identity.selfImage),
+        idealSelf: pickString(current.identity.idealSelf, incoming.identity.idealSelf),
+        mainConflict: pickString(current.identity.mainConflict, incoming.identity.mainConflict),
+      },
+      socialRomanticPatterns: pickArray(current.socialRomanticPatterns, incoming.socialRomanticPatterns),
+      strengths: pickArray(current.strengths, incoming.strengths),
+      blockers: pickArray(current.blockers, incoming.blockers),
+      values: pickArray(current.values, incoming.values),
+      goals90d: pickArray(current.goals90d, incoming.goals90d),
+      executionRisks: pickArray(current.executionRisks, incoming.executionRisks),
+      recommendedNextFocus: pickString(current.recommendedNextFocus, incoming.recommendedNextFocus),
+    }
+  }
+
+  private formatAvatarProfileContext(profile: AvatarProfile): string {
+    const lines: string[] = [
+      `Status: ${profile.status}`,
+      `Fase atual: ${profile.currentPhase ?? 'nenhuma'}`,
+      `Fases concluídas: ${profile.completedPhases.length > 0 ? profile.completedPhases.join(', ') : 'nenhuma'}`,
+    ]
+
+    if (profile.profileSummary.identity.selfImage) {
+      lines.push(`Autoimagem: ${profile.profileSummary.identity.selfImage}`)
+    }
+    if (profile.profileSummary.identity.idealSelf) {
+      lines.push(`Eu ideal: ${profile.profileSummary.identity.idealSelf}`)
+    }
+    if (profile.profileSummary.identity.mainConflict) {
+      lines.push(`Conflito central: ${profile.profileSummary.identity.mainConflict}`)
+    }
+    if (profile.profileSummary.strengths.length > 0) {
+      lines.push(`Forças: ${profile.profileSummary.strengths.join('; ')}`)
+    }
+    if (profile.profileSummary.blockers.length > 0) {
+      lines.push(`Bloqueios: ${profile.profileSummary.blockers.join('; ')}`)
+    }
+    if (profile.profileSummary.values.length > 0) {
+      lines.push(`Valores: ${profile.profileSummary.values.join('; ')}`)
+    }
+    if (profile.profileSummary.goals90d.length > 0) {
+      lines.push(`Metas 90d: ${profile.profileSummary.goals90d.join('; ')}`)
+    }
+    if (profile.profileSummary.socialRomanticPatterns.length > 0) {
+      lines.push(`Padrões sociais/românticos: ${profile.profileSummary.socialRomanticPatterns.join('; ')}`)
+    }
+    if (profile.profileSummary.executionRisks.length > 0) {
+      lines.push(`Riscos de execução: ${profile.profileSummary.executionRisks.join('; ')}`)
+    }
+    if (profile.profileSummary.recommendedNextFocus) {
+      lines.push(`Próximo foco recomendado: ${profile.profileSummary.recommendedNextFocus}`)
+    }
+
+    const phaseEntries = Object.entries(profile.phaseData).sort(([left], [right]) =>
+      left.localeCompare(right, 'pt-BR', { numeric: true }),
+    )
+    if (phaseEntries.length > 0) {
+      lines.push('Resumo por fase:')
+      for (const [phaseKey, snapshot] of phaseEntries) {
+        lines.push(`- ${snapshot.title ?? phaseKey}: ${snapshot.summary}`)
+      }
+    }
+
+    return lines.join('\n')
+  }
+
+  private coerceStringArray(value: unknown): string[] {
+    if (!Array.isArray(value)) {
+      return []
+    }
+
+    return value
+      .filter((item): item is string => typeof item === 'string')
+      .map((item) => item.trim())
+      .filter(Boolean)
+  }
+
   private async generateConversationSummary(
     messages: ConversationHistory['messages'],
     existingSummary?: string,
@@ -913,11 +1225,20 @@ Os arquivos enviados nesta conversa estão bloqueados até a assinatura ativa. N
     context: UserContext,
     history: ConversationHistory,
     hasImage = false,
+    conversation: Conversation | null = null,
   ): string {
     let basePrompt: string
+    const agentId = this.getConversationAgentId(conversation)
 
+    if (agentId) {
+      basePrompt = getAgentSystemPrompt(agentId)
+    }
+    // Conversa genérica com memória estruturada já existente.
+    else if (context.structuredDiagnosisStatus && context.structuredDiagnosisStatus !== 'not_started') {
+      basePrompt = ISABELA_RETURNING
+    }
     // Primeiro contato
-    if (history.messages.length === 0) {
+    else if (history.messages.length === 0) {
       basePrompt = ISABELA_GREETING
     }
     // Ainda não fez diagnóstico - IA conduz naturalmente
@@ -967,6 +1288,17 @@ Os arquivos enviados nesta conversa estão bloqueados até a assinatura ativa. N
 
       if (this.deps.conversationRepo && (!conversation || conversation.userId !== userId)) {
         throw new Error('Conversation not found for user')
+      }
+
+      const userContext = await this.buildUserContext(user)
+      const conversationAgentId = this.getConversationAgentId(conversation)
+
+      if (
+        conversationAgentId &&
+        agentRequiresStructuredDiagnosis(conversationAgentId) &&
+        userContext.hasStructuredDiagnosis !== true
+      ) {
+        return { success: false, error: 'diagnosis_required' }
       }
 
       const content = params.content?.trim()
@@ -1053,6 +1385,7 @@ Os arquivos enviados nesta conversa estão bloqueados até a assinatura ativa. N
         onUserMessageSaved: () => {
           userMessageSaved = true
         },
+        userContextOverride: userContext,
       })
 
       // Responde via canal (AppChannelAdapter emite via SSE)

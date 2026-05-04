@@ -31,6 +31,7 @@ import {
 const createPersistence = async () => {
   const {
     SupabaseAttachmentRepository,
+    SupabaseAvatarProfileRepository,
     createSupabaseClient,
     SupabaseConversationRepository,
     SupabaseDiagnosticRepository,
@@ -41,6 +42,7 @@ const createPersistence = async () => {
   return {
     supabase,
     attachmentRepo: new SupabaseAttachmentRepository(supabase),
+    avatarProfileRepo: new SupabaseAvatarProfileRepository(supabase),
     userRepo: new SupabaseUserRepository(supabase),
     conversationRepo: new SupabaseConversationRepository(supabase),
     diagnosticRepo: new SupabaseDiagnosticRepository(supabase),
@@ -172,6 +174,7 @@ async function main() {
   let diagnosticRepo
   let subscriptionRepo
   let attachmentRepo
+  let avatarProfileRepo
   let attachmentStorage
   let sessionRepo
   let magicLinkRepo
@@ -185,6 +188,7 @@ async function main() {
     diagnosticRepo = persistence.diagnosticRepo
     subscriptionRepo = persistence.subscriptionRepo
     attachmentRepo = persistence.attachmentRepo
+    avatarProfileRepo = persistence.avatarProfileRepo
     attachmentStorage = new ChatAttachmentStorageService(persistence.supabase)
     rag = await createOptionalRAG(persistence.supabase)
     attachmentRag = await createOptionalAttachmentRAG(persistence.supabase)
@@ -218,7 +222,13 @@ async function main() {
   )
   const healthRoute = createHealthRoute({
     checks: {
-      database: Boolean(conversationRepo && diagnosticRepo && subscriptionRepo && userRepo),
+      database: Boolean(
+        conversationRepo &&
+          diagnosticRepo &&
+          subscriptionRepo &&
+          userRepo &&
+          avatarProfileRepo,
+      ),
       email: emailDeliveryConfigured,
       payment: paymentConfigured,
       storage: storageConfigured,
@@ -244,6 +254,7 @@ async function main() {
     logger,
     conversationRepo,
     attachmentRepo,
+    avatarProfileRepo,
     diagnosticRepo,
     subscriptionRepo,
     rag,
@@ -316,6 +327,7 @@ async function main() {
       logger,
       conversationRepo,
       attachmentRepo,
+      avatarProfileRepo,
       diagnosticRepo,
       subscriptionRepo,
       rag,

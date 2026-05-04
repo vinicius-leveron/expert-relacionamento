@@ -33,6 +33,7 @@ export interface Conversation {
   channel: string
   status: 'active' | 'archived'
   summary?: string
+  metadata?: Record<string, unknown>
   createdAt: Date
   updatedAt: Date
   messages: Message[]
@@ -42,7 +43,11 @@ export interface ConversationRepository {
   /**
    * Cria nova conversa
    */
-  create(params: { userId: string; channel: string }): Promise<Conversation>
+  create(params: {
+    userId: string
+    channel: string
+    metadata?: Record<string, unknown>
+  }): Promise<Conversation>
 
   /**
    * Busca conversa por ID
@@ -126,13 +131,18 @@ export class SupabaseConversationRepository implements ConversationRepository {
     )
   }
 
-  async create(params: { userId: string; channel: string }): Promise<Conversation> {
+  async create(params: {
+    userId: string
+    channel: string
+    metadata?: Record<string, unknown>
+  }): Promise<Conversation> {
     const { data, error } = await this.supabase
       .from('conversations')
       .insert({
         user_id: params.userId,
         channel: params.channel,
         status: 'active',
+        metadata: (params.metadata ?? {}) as Json,
       })
       .select()
       .single()
@@ -359,12 +369,18 @@ export class SupabaseConversationRepository implements ConversationRepository {
   }
 
   private mapConversation(row: ConversationRow, messages: Message[]): Conversation {
+    const metadata =
+      row.metadata && typeof row.metadata === 'object' && !Array.isArray(row.metadata)
+        ? (row.metadata as Record<string, unknown>)
+        : undefined
+
     return {
       id: row.id,
       userId: row.user_id,
       channel: row.channel,
       status: row.status as 'active' | 'archived',
       summary: row.summary ?? undefined,
+      metadata,
       createdAt: new Date(row.created_at),
       updatedAt: new Date(row.updated_at),
       messages,

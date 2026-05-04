@@ -12,6 +12,8 @@ import type {
 import type {
   AttachmentRepository,
   Archetype,
+  AvatarProfile,
+  AvatarProfileRepository,
   ConversationRepository,
   Diagnostic,
   DiagnosticRepository,
@@ -72,18 +74,25 @@ class RecordingAIProvider implements AIProviderPort {
 class InMemoryConversationRepo implements ConversationRepository {
   private readonly conversations = new Map<
     string,
-    { id: string; userId: string; channel: string; summary?: string }
+    {
+      id: string
+      userId: string
+      channel: string
+      summary?: string
+      metadata?: Record<string, unknown>
+    }
   >()
   private readonly messages: Message[] = []
   private conversationCounter = 0
   private messageCounter = 0
 
-  async create(params: { userId: string; channel: string }) {
+  async create(params: { userId: string; channel: string; metadata?: Record<string, unknown> }) {
     const conversation = {
       id: `conversation-${++this.conversationCounter}`,
       userId: params.userId,
       channel: params.channel,
       summary: undefined,
+      metadata: params.metadata,
     }
     this.conversations.set(conversation.id, conversation)
 
@@ -145,6 +154,7 @@ class InMemoryConversationRepo implements ConversationRepository {
       userId,
       channel,
       summary: undefined,
+      metadata: undefined,
     }
     this.conversations.set(conversation.id, conversation)
 
@@ -359,6 +369,41 @@ class StubSubscriptionRepo implements SubscriptionRepository {
   async updateByExternalId(): Promise<void> {}
 }
 
+class StubAvatarProfileRepo implements AvatarProfileRepository {
+  avatarProfile: AvatarProfile | null = null
+  upsertCalls = 0
+
+  async getByUserId(): Promise<AvatarProfile | null> {
+    return this.avatarProfile
+  }
+
+  async upsert(params: {
+    userId: string
+    status: 'not_started' | 'in_progress' | 'completed'
+    currentPhase: number | null
+    completedPhases: number[]
+    phaseData: Record<string, unknown>
+    profileSummary: AvatarProfile['profileSummary']
+    sourceConversationId?: string | null
+  }): Promise<AvatarProfile> {
+    this.upsertCalls += 1
+    this.avatarProfile = {
+      id: 'avatar-profile-1',
+      userId: params.userId,
+      status: params.status,
+      currentPhase: params.currentPhase,
+      completedPhases: params.completedPhases,
+      phaseData: params.phaseData as AvatarProfile['phaseData'],
+      profileSummary: params.profileSummary,
+      sourceConversationId: params.sourceConversationId ?? null,
+      createdAt: this.avatarProfile?.createdAt ?? new Date(),
+      updatedAt: new Date(),
+    }
+
+    return this.avatarProfile
+  }
+}
+
 function createTextMessage(text: string): IncomingMessage {
   return {
     externalId: 'incoming-1',
@@ -390,6 +435,7 @@ function createPipeline(params: {
   diagnosticRepo?: StubDiagnosticRepo
   subscriptionRepo?: StubSubscriptionRepo
   conversationRepo?: InMemoryConversationRepo
+  avatarProfileRepo?: StubAvatarProfileRepo
   inlineImageStorage?: {
     removeObject(path: string): Promise<void>
   }
@@ -463,6 +509,7 @@ function createPipeline(params: {
     diagnosticRepo: params.diagnosticRepo,
     subscriptionRepo: params.subscriptionRepo,
     conversationRepo: params.conversationRepo,
+    avatarProfileRepo: params.avatarProfileRepo,
     rag: params.rag as never,
     attachmentRepo: params.attachmentRepo as unknown as AttachmentRepository,
     attachmentRag: params.attachmentRag as never,
@@ -1253,5 +1300,91 @@ describe('MessagePipeline', () => {
     expect(messages[0]?.metadata).toMatchObject({
       imageStoragePath: 'users/u1/conversations/c1/inline-images/image-1.png',
     })
+  })
+
+  it('processAppMessage bloqueia agente derivado sem diagnóstico estruturado completo', async () => {
+    const conversationRepo = new InMemoryConversationRepo()
+    const avatarProfileRepo = new StubAvatarProfileRepo()
+    avatarProfileRepo.avatarProfile = {
+      id: 'avatar-profile-1',
+      userId: 'placeholder',
+      status: 'in_progress',
+      currentPhase: 3,
+      completedPhases: [1, 2],
+      phaseData: {},
+      profileSummary: {
+        identity: { selfImage: '', idealSelf: '', mainConflict: '' },
+        socialRomanticPatterns: [],
+        strengths: [],
+        blockers: [],
+        values: [],
+        goals90d: [],
+        executionRisks: [],
+        recommendedNextFocus: '',
+      },
+      sourceConversationId: null,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    }
+    const { pipeline, userRepo } = createPipeline({
+      message: createTextMessage('ignorada'),
+      aiResponses: ['não importa'],
+      conversationRepo,
+      avatarProfileRepo,
+    })
+
+    const user = await userRepo.findOrCreateByPhone('5511999999999')
+    avatarProfileRepo.avatarProfile.userId = user.id
+    const conversation = await conversationRepo.create({
+      userId: user.id,
+      channel: 'app',
+      metadata: { agentId: 'vsm' },
+    })
+
+    const result = await pipeline.processAppMessage({
+      userId: user.id,
+      conversationId: conversation.id,
+      content: 'quero meu VSM',
+    })
+
+    expect(result).toEqual({ success: false, error: 'diagnosis_required' })
+  })
+
+  it('agente de diagnóstico persiste avatar_profile e remove bloco oculto da resposta visível', async () => {
+    const conversationRepo = new InMemoryConversationRepo()
+    const avatarProfileRepo = new StubAvatarProfileRepo()
+    const { pipeline, channel, userRepo } = createPipeline({
+      message: createTextMessage('ignorada'),
+      aiResponses: [
+        'Fechamos a fase 1.\n\n[[PERPETUO_STATE]]{"kind":"avatar_profile_update","agentId":"diagnostic","status":"in_progress","currentPhase":1,"completedPhases":[1],"phaseUpdate":{"phase":1,"title":"Identidade & Psicologia","summary":"Mapa inicial concluído","extractedSignals":["autocrítica alta"],"rawAnswers":["resposta 1"]},"profileSummary":{"identity":{"selfImage":"travado","idealSelf":"seguro","mainConflict":"medo de rejeição"},"socialRomanticPatterns":["evita exposição"],"strengths":["honestidade"],"blockers":["ansiedade social"],"values":["família"],"goals90d":["melhorar presença"],"executionRisks":["procrastinação"],"recommendedNextFocus":"exposição gradual"}}[[/PERPETUO_STATE]]',
+      ],
+      conversationRepo,
+      avatarProfileRepo,
+    })
+
+    const user = await userRepo.findOrCreateByPhone('5511999999999')
+    const conversation = await conversationRepo.create({
+      userId: user.id,
+      channel: 'app',
+      metadata: { agentId: 'diagnostic' },
+    })
+
+    const result = await pipeline.processAppMessage({
+      userId: user.id,
+      conversationId: conversation.id,
+      content: 'quero começar',
+    })
+
+    expect(result.success).toBe(true)
+    expect(channel.sentMessages[0]?.content).toMatchObject({
+      type: 'text',
+      text: 'Fechamos a fase 1.',
+    })
+    expect(avatarProfileRepo.upsertCalls).toBe(1)
+    expect(avatarProfileRepo.avatarProfile?.status).toBe('in_progress')
+    expect(avatarProfileRepo.avatarProfile?.completedPhases).toEqual([1])
+
+    const messages = await conversationRepo.getMessages(conversation.id)
+    expect(messages.at(-1)?.content).toBe('Fechamos a fase 1.')
   })
 })

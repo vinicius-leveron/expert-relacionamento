@@ -118,6 +118,7 @@ export type Database = {
           channel: string
           status: string
           summary: string | null
+          metadata: Json
           created_at: string
           updated_at: string
         }
@@ -127,6 +128,7 @@ export type Database = {
           channel?: string
           status?: string
           summary?: string | null
+          metadata?: Json
           created_at?: string
           updated_at?: string
         }
@@ -136,12 +138,65 @@ export type Database = {
           channel?: string
           status?: string
           summary?: string | null
+          metadata?: Json
           created_at?: string
           updated_at?: string
         }
         Relationships: [
           {
             foreignKeyName: 'conversations_user_id_fkey'
+            columns: ['user_id']
+            referencedRelation: 'users'
+            referencedColumns: ['id']
+          },
+        ]
+      }
+      avatar_profiles: {
+        Row: {
+          id: string
+          user_id: string
+          status: string
+          current_phase: number | null
+          completed_phases: Json
+          phase_data: Json
+          profile_summary: Json
+          source_conversation_id: string | null
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          user_id: string
+          status?: string
+          current_phase?: number | null
+          completed_phases?: Json
+          phase_data?: Json
+          profile_summary?: Json
+          source_conversation_id?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          user_id?: string
+          status?: string
+          current_phase?: number | null
+          completed_phases?: Json
+          phase_data?: Json
+          profile_summary?: Json
+          source_conversation_id?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: 'avatar_profiles_source_conversation_id_fkey'
+            columns: ['source_conversation_id']
+            referencedRelation: 'conversations'
+            referencedColumns: ['id']
+          },
+          {
+            foreignKeyName: 'avatar_profiles_user_id_fkey'
             columns: ['user_id']
             referencedRelation: 'users'
             referencedColumns: ['id']
@@ -695,6 +750,7 @@ export type Tables<
 // Convenience types
 export type UserRow = Database['public']['Tables']['users']['Row']
 export type ConversationRow = Database['public']['Tables']['conversations']['Row']
+export type AvatarProfileRow = Database['public']['Tables']['avatar_profiles']['Row']
 export type MessageRow = Database['public']['Tables']['messages']['Row']
 export type ChatAttachmentRow = Database['public']['Tables']['chat_attachments']['Row']
 export type MessageAttachmentRow = Database['public']['Tables']['message_attachments']['Row']
