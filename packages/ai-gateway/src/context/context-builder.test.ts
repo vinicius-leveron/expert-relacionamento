@@ -17,8 +17,9 @@ describe('ContextBuilder', () => {
         hasRagAccess: false,
         canAnalyzeImages: false,
         imageAnalysisUsedThisMonth: 3,
-        imageAnalysisLimit: 20,
-        imageAnalysisRemainingThisMonth: 17,
+        imageAnalysisLimit: 30,
+        imageAnalysisRemainingThisMonth: 27,
+        imageAnalysisQuotaLabel: 'prints/conversas',
       },
       history: { messages: [] },
       currentMessage: 'oi',
@@ -46,8 +47,9 @@ describe('ContextBuilder', () => {
         hasRagAccess: true,
         canAnalyzeImages: true,
         imageAnalysisUsedThisMonth: 19,
-        imageAnalysisLimit: 20,
-        imageAnalysisRemainingThisMonth: 1,
+        imageAnalysisLimit: 30,
+        imageAnalysisRemainingThisMonth: 11,
+        imageAnalysisQuotaLabel: 'prints/conversas',
       },
       history: { messages: [] },
       currentMessage: 'oi',
@@ -57,6 +59,8 @@ describe('ContextBuilder', () => {
 
     expect(systemPrompt).toContain('Assinatura: ATIVA')
     expect(systemPrompt).toContain('RAG: LIBERADO')
-    expect(systemPrompt).toContain('Análises de imagem: 19/20 usadas (restam 1)')
+    expect(systemPrompt).toContain(
+      'Análises de imagem (prints/conversas): 19/30 usadas (restam 11)',
+    )
   })
 })

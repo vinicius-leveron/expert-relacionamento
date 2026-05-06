@@ -15,6 +15,7 @@ describe('IdentityResolver', () => {
       save: vi.fn(),
       findOrCreateByPhone: vi.fn(),
       findOrCreateByEmail: vi.fn(),
+      linkEmail: vi.fn(),
       linkPhone: vi.fn(),
     }
     resolver = new IdentityResolver(mockUserRepo)

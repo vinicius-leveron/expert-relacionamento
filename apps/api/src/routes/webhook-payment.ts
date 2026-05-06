@@ -40,6 +40,7 @@ export function createPaymentWebhookRoute(deps: PaymentWebhookRouteDependencies)
         payload,
         userRepo: deps.userRepo,
         subscriptionRepo: deps.subscriptionRepo,
+        logger: deps.logger,
       })
 
       deps.logger.info(
@@ -66,15 +67,11 @@ async function syncPaymentEvent(params: {
   payload: unknown
   userRepo: UserRepository
   subscriptionRepo: SubscriptionRepository
+  logger: Logger
 }): Promise<void> {
-  const { event, payload, userRepo, subscriptionRepo } = params
+  const { event, payload, userRepo, subscriptionRepo, logger } = params
   const rawPayload = asRecord(payload)
-
-  let user = await userRepo.findByEmail(event.email)
-  if (!user) {
-    user = User.create({ email: event.email })
-    await userRepo.save(user)
-  }
+  const user = await resolveUserForPaymentEvent({ event, payload: rawPayload, userRepo, logger })
 
   const existing = await subscriptionRepo.getByExternalId(event.externalSubscriptionId)
   const metadata = buildSubscriptionMetadata(rawPayload, event, existing?.metadata)
@@ -133,8 +130,78 @@ function buildSubscriptionMetadata(
         getString(user, 'email') ??
         getString(invoicePayer, 'email') ??
         event.email,
+      phoneE164: extractPaymentPhone(payload),
     },
   }
+}
+
+async function resolveUserForPaymentEvent(params: {
+  event: NonNullable<ReturnType<PaymentPort['parseWebhook']>>
+  payload: JsonRecord | null
+  userRepo: UserRepository
+  logger: Logger
+}): Promise<User> {
+  const { event, payload, userRepo, logger } = params
+  const email = normalizeEmail(event.email)
+  const phoneE164 = extractPaymentPhone(payload)
+
+  const [emailUser, phoneUser] = await Promise.all([
+    userRepo.findByEmail(email),
+    phoneE164 ? userRepo.findByPhone(phoneE164) : Promise.resolve(null),
+  ])
+
+  if (emailUser && phoneUser && emailUser.id !== phoneUser.id) {
+    throw new Error(
+      `Payment identity conflict for email ${email} and phone ${phoneE164}: users ${emailUser.id} and ${phoneUser.id}`,
+    )
+  }
+
+  if (emailUser) {
+    if (phoneE164 && !emailUser.phoneE164) {
+      return userRepo.linkPhone(emailUser.id, phoneE164)
+    }
+
+    if (phoneE164 && emailUser.phoneE164 && emailUser.phoneE164 !== phoneE164) {
+      logger.warn(
+        {
+          userId: emailUser.id,
+          email,
+          linkedPhone: emailUser.phoneE164,
+          webhookPhone: phoneE164,
+        },
+        'Payment webhook phone does not match linked phone',
+      )
+    }
+
+    return emailUser
+  }
+
+  if (phoneUser) {
+    if (!phoneUser.email) {
+      return userRepo.linkEmail(phoneUser.id, email)
+    }
+
+    if (phoneUser.email !== email) {
+      logger.warn(
+        {
+          userId: phoneUser.id,
+          linkedEmail: phoneUser.email,
+          webhookEmail: email,
+          phoneE164,
+        },
+        'Payment webhook email does not match linked email',
+      )
+    }
+
+    return phoneUser
+  }
+
+  const user = User.create({
+    email,
+    phoneE164: phoneE164 ?? undefined,
+  })
+  await userRepo.save(user)
+  return user
 }
 
 function mapSubscriptionStatus(eventType: NonNullable<ReturnType<PaymentPort['parseWebhook']>>['type']) {
@@ -208,6 +275,64 @@ function parseDate(value: string | undefined): Date | undefined {
 function extractType(payload: unknown): string | undefined {
   const record = asRecord(payload)
   return getString(record, 'type')
+}
+
+function normalizeEmail(email: string): string {
+  return email.trim().toLowerCase()
+}
+
+function extractPaymentPhone(payload: JsonRecord | null): string | null {
+  const event = asRecord(payload?.event)
+  const subscription = asRecord(event?.subscription)
+  const invoice = asRecord(event?.invoice)
+  const invoicePayer = asRecord(invoice?.payer)
+  const user = asRecord(event?.user)
+
+  const rawPhone =
+    getString(subscription, 'phone') ??
+    getString(subscription, 'phoneNumber') ??
+    getString(subscription, 'cellphone') ??
+    getString(subscription, 'whatsapp') ??
+    getString(user, 'phone') ??
+    getString(user, 'phoneNumber') ??
+    getString(user, 'cellphone') ??
+    getString(user, 'whatsapp') ??
+    getString(invoicePayer, 'phone') ??
+    getString(invoicePayer, 'phoneNumber') ??
+    getString(invoicePayer, 'cellphone') ??
+    getString(invoicePayer, 'whatsapp')
+
+  return normalizePhoneToE164(rawPhone)
+}
+
+function normalizePhoneToE164(rawPhone: string | undefined): string | null {
+  if (!rawPhone) {
+    return null
+  }
+
+  const trimmed = rawPhone.trim()
+  if (!trimmed) {
+    return null
+  }
+
+  const digits = trimmed.replace(/\D/g, '')
+  if (digits.length < 8 || digits.length > 15) {
+    return null
+  }
+
+  if (trimmed.startsWith('+')) {
+    return `+${digits}`
+  }
+
+  if (digits.startsWith('00') && digits.length > 10) {
+    return `+${digits.slice(2)}`
+  }
+
+  if (digits.length === 10 || digits.length === 11) {
+    return `+55${digits}`
+  }
+
+  return `+${digits}`
 }
 
 function asRecord(value: unknown): JsonRecord | null {

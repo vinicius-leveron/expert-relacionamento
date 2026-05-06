@@ -33,6 +33,9 @@ const MAX_ATTACHMENTS_PER_MESSAGE = 5
 const MAX_INLINE_IMAGE_SIZE_BYTES = 5 * 1024 * 1024
 const MAX_INLINE_AUDIO_SIZE_BYTES = 10 * 1024 * 1024
 const MAX_PROFILE_AVATAR_SIZE_BYTES = 3 * 1024 * 1024
+const CONVERSATION_IMAGE_ANALYSIS_LIMIT = 30
+const PROFILE_IMAGE_ANALYSIS_LIMIT = 5
+const PROFILE_IMAGE_ANALYSIS_AGENT_IDS = ['instagram-analyzer']
 const SUPPORTED_ATTACHMENT_MIME_TYPES = new Set([
   'application/pdf',
   'text/plain',
@@ -241,13 +244,48 @@ export function createApiRoutes(config: ApiRoutesConfig) {
     const diagnostic = diagnosticRepo ? await diagnosticRepo.getByUserId(userId) : null
     const subscription = subscriptionRepo ? await subscriptionRepo.getLatestByUserId(userId) : null
     const avatarProfile = avatarProfileRepo ? await avatarProfileRepo.getByUserId(userId) : null
+    const hasConversationCounter =
+      conversationRepo && typeof conversationRepo.countUserMessagesByTypeSince === 'function'
+    const startOfMonth = new Date()
+    startOfMonth.setDate(1)
+    startOfMonth.setHours(0, 0, 0, 0)
+    const [conversationImageAnalysisUsedThisMonth, profileImageAnalysisUsedThisMonth] =
+      hasConversationCounter
+        ? await Promise.all([
+            conversationRepo.countUserMessagesByTypeSince({
+              userId,
+              role: 'user',
+              contentType: 'image',
+              since: startOfMonth,
+              excludeConversationAgentIds: PROFILE_IMAGE_ANALYSIS_AGENT_IDS,
+            }),
+            conversationRepo.countUserMessagesByTypeSince({
+              userId,
+              role: 'user',
+              contentType: 'image',
+              since: startOfMonth,
+              conversationAgentIds: PROFILE_IMAGE_ANALYSIS_AGENT_IDS,
+            }),
+          ])
+        : [0, 0]
     const diagnosisCompleted = diagnostic !== null
     const hasStructuredDiagnosis = avatarProfile?.status === 'completed'
     const hasActiveSubscription = subscription?.status === 'active'
     const subscriptionCheckEnabled = subscriptionRepo !== undefined
     const hasChatAccess = !subscriptionCheckEnabled || hasActiveSubscription
     const hasJourneyAccess = diagnosisCompleted && hasChatAccess
-    const canAnalyzeImages = hasChatAccess
+    const conversationImageAnalysisRemainingThisMonth = Math.max(
+      CONVERSATION_IMAGE_ANALYSIS_LIMIT - conversationImageAnalysisUsedThisMonth,
+      0,
+    )
+    const profileImageAnalysisRemainingThisMonth = Math.max(
+      PROFILE_IMAGE_ANALYSIS_LIMIT - profileImageAnalysisUsedThisMonth,
+      0,
+    )
+    const canAnalyzeImages =
+      hasChatAccess &&
+      (conversationImageAnalysisRemainingThisMonth > 0 ||
+        profileImageAnalysisRemainingThisMonth > 0)
 
     let avatarUrl: string | null = null
     if (user.avatarStoragePath && attachmentStorage) {
@@ -296,6 +334,20 @@ export function createApiRoutes(config: ApiRoutesConfig) {
         hasJourneyAccess,
         canAnalyzeImages,
         hasStructuredDiagnosis,
+      },
+      usage: {
+        imageAnalyses: {
+          conversation: {
+            used: conversationImageAnalysisUsedThisMonth,
+            limit: CONVERSATION_IMAGE_ANALYSIS_LIMIT,
+            remaining: conversationImageAnalysisRemainingThisMonth,
+          },
+          profile: {
+            used: profileImageAnalysisUsedThisMonth,
+            limit: PROFILE_IMAGE_ANALYSIS_LIMIT,
+            remaining: profileImageAnalysisRemainingThisMonth,
+          },
+        },
       },
       commerce: {
         checkoutUrl: paymentUrl ?? null,

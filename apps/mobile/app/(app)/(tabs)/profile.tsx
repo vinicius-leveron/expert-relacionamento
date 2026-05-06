@@ -64,6 +64,9 @@ export default function ProfileScreen() {
     }
   };
 
+  const conversationImageUsage = profile?.usage.imageAnalyses.conversation;
+  const profileImageUsage = profile?.usage.imageAnalyses.profile;
+
   const stats = [
     {
       icon: 'diamond' as const,
@@ -91,9 +94,27 @@ export default function ProfileScreen() {
     },
     {
       icon: 'images' as const,
-      value: profile?.access.canAnalyzeImages ? 'Liberado' : 'Bloq.',
-      label: 'Imagens',
-      color: profile?.access.canAnalyzeImages ? colors.success : colors.textMuted,
+      value: profile?.access.hasChatAccess
+        ? `${conversationImageUsage?.remaining ?? 0}/${conversationImageUsage?.limit ?? 30}`
+        : 'Bloq.',
+      label: 'Prints',
+      color: profile?.access.hasChatAccess
+        ? (conversationImageUsage?.remaining ?? 0) > 0
+          ? colors.success
+          : colors.warning
+        : colors.textMuted,
+    },
+    {
+      icon: 'logo-instagram' as const,
+      value: profile?.access.hasChatAccess
+        ? `${profileImageUsage?.remaining ?? 0}/${profileImageUsage?.limit ?? 5}`
+        : 'Bloq.',
+      label: 'Perfil',
+      color: profile?.access.hasChatAccess
+        ? (profileImageUsage?.remaining ?? 0) > 0
+          ? colors.success
+          : colors.warning
+        : colors.textMuted,
     },
   ];
 

@@ -83,6 +83,10 @@ class InMemoryUserRepo implements UserRepository {
     return existing
   }
 
+  async linkEmail(): Promise<User> {
+    throw new Error('Not implemented in test')
+  }
+
   async linkPhone(): Promise<User> {
     throw new Error('Not implemented in test')
   }

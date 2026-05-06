@@ -14,10 +14,19 @@ export interface UserContext {
   structuredDiagnosisStatus?: 'not_started' | 'in_progress' | 'completed'
   structuredDiagnosisCurrentPhase?: number | null
   avatarProfileContext?: string
-  // Rate limiting de imagens (20/mês)
+  // Quota ativa de imagem para o contexto atual da conversa
+  imageAnalysisQuotaKey?: 'conversation' | 'profile'
+  imageAnalysisQuotaLabel?: string
   imageAnalysisUsedThisMonth?: number
   imageAnalysisLimit?: number
   imageAnalysisRemainingThisMonth?: number
+  // Quotas globais por categoria
+  conversationImageAnalysisUsedThisMonth?: number
+  conversationImageAnalysisLimit?: number
+  conversationImageAnalysisRemainingThisMonth?: number
+  profileImageAnalysisUsedThisMonth?: number
+  profileImageAnalysisLimit?: number
+  profileImageAnalysisRemainingThisMonth?: number
 }
 
 export interface ConversationHistory {
@@ -177,14 +186,21 @@ export class ContextBuilder {
       const limit = context.imageAnalysisLimit ?? 20
       const used = context.imageAnalysisUsedThisMonth
       const remaining = context.imageAnalysisRemainingThisMonth ?? limit - used
+      const quotaLabel = context.imageAnalysisQuotaLabel
+        ? ` (${context.imageAnalysisQuotaLabel})`
+        : ''
 
       if (remaining <= 0) {
-        contextLines.push(`Análises de imagem: LIMITE ATINGIDO (${used}/${limit} este mês)`)
+        contextLines.push(
+          `Análises de imagem${quotaLabel}: LIMITE ATINGIDO (${used}/${limit} este mês)`,
+        )
         contextLines.push(
           'Se o usuário enviar imagem, explique gentilmente que o limite mensal foi atingido',
         )
       } else {
-        contextLines.push(`Análises de imagem: ${used}/${limit} usadas (restam ${remaining})`)
+        contextLines.push(
+          `Análises de imagem${quotaLabel}: ${used}/${limit} usadas (restam ${remaining})`,
+        )
       }
     }
 

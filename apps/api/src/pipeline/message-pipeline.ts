@@ -126,6 +126,12 @@ export interface AppMessageParams {
   attachmentIds?: string[]
 }
 
+const CONVERSATION_IMAGE_ANALYSIS_LIMIT = 30
+const PROFILE_IMAGE_ANALYSIS_LIMIT = 5
+const PROFILE_IMAGE_ANALYSIS_AGENT_IDS = new Set<AgentId>(['instagram-analyzer'])
+
+type ImageAnalysisQuotaScope = 'conversation' | 'profile'
+
 /**
  * MessagePipeline - Orquestra o processamento de mensagens
  *
@@ -227,7 +233,8 @@ export class MessagePipeline {
         ? await this.deps.conversationRepo.getOrCreateActive(user.id, message.channelType)
         : null
 
-    const userContext = options.userContextOverride ?? await this.buildUserContext(user)
+    const userContext =
+      options.userContextOverride ?? (await this.buildUserContext(user, conversation))
 
     // Extrai conteúdo da mensagem
     const { text: messageText, contentBlocks } = await this.extractMessageContent(message)
@@ -760,7 +767,11 @@ Os arquivos enviados nesta conversa estão bloqueados até a assinatura ativa. N
     return { text: '[Mensagem não suportada]' }
   }
 
-  private async buildUserContext(user: User): Promise<UserContext> {
+  private async buildUserContext(
+    user: User,
+    conversation: Conversation | null = null,
+  ): Promise<UserContext> {
+    const activeImageQuota = this.resolveImageAnalysisQuota(conversation)
     const context: UserContext = {
       userId: user.id,
       diagnosisCompleted: false,
@@ -768,7 +779,11 @@ Os arquivos enviados nesta conversa estão bloqueados até a assinatura ativa. N
       hasStructuredDiagnosis: false,
       structuredDiagnosisStatus: 'not_started',
       structuredDiagnosisCurrentPhase: null,
-      imageAnalysisLimit: 20,
+      imageAnalysisQuotaKey: activeImageQuota.scope,
+      imageAnalysisQuotaLabel: activeImageQuota.label,
+      imageAnalysisLimit: activeImageQuota.limit,
+      conversationImageAnalysisLimit: CONVERSATION_IMAGE_ANALYSIS_LIMIT,
+      profileImageAnalysisLimit: PROFILE_IMAGE_ANALYSIS_LIMIT,
       subscriptionOfferUrl: this.deps.paymentUrl,
     }
 
@@ -803,12 +818,31 @@ Os arquivos enviados nesta conversa estão bloqueados até a assinatura ativa. N
       context.hasActiveSubscription = await this.deps.subscriptionRepo.isActive(user.id)
     }
 
-    // Conta uso de imagens no mês
-    context.imageAnalysisUsedThisMonth = await this.countImageAnalysisThisMonth(user.id)
-    context.imageAnalysisRemainingThisMonth = Math.max(
-      (context.imageAnalysisLimit ?? 20) - context.imageAnalysisUsedThisMonth,
+    const [conversationImageAnalysisUsedThisMonth, profileImageAnalysisUsedThisMonth] =
+      await Promise.all([
+        this.countImageAnalysisThisMonth(user.id, 'conversation'),
+        this.countImageAnalysisThisMonth(user.id, 'profile'),
+      ])
+
+    context.conversationImageAnalysisUsedThisMonth = conversationImageAnalysisUsedThisMonth
+    context.conversationImageAnalysisRemainingThisMonth = Math.max(
+      CONVERSATION_IMAGE_ANALYSIS_LIMIT - conversationImageAnalysisUsedThisMonth,
       0,
     )
+    context.profileImageAnalysisUsedThisMonth = profileImageAnalysisUsedThisMonth
+    context.profileImageAnalysisRemainingThisMonth = Math.max(
+      PROFILE_IMAGE_ANALYSIS_LIMIT - profileImageAnalysisUsedThisMonth,
+      0,
+    )
+
+    context.imageAnalysisUsedThisMonth =
+      activeImageQuota.scope === 'profile'
+        ? profileImageAnalysisUsedThisMonth
+        : conversationImageAnalysisUsedThisMonth
+    context.imageAnalysisRemainingThisMonth =
+      activeImageQuota.scope === 'profile'
+        ? context.profileImageAnalysisRemainingThisMonth
+        : context.conversationImageAnalysisRemainingThisMonth
 
     const subscriptionCheckEnabled = this.deps.subscriptionRepo !== undefined
     const hasActiveSubscription = context.hasActiveSubscription === true
@@ -825,7 +859,10 @@ Os arquivos enviados nesta conversa estão bloqueados até a assinatura ativa. N
   /**
    * Conta quantas análises de imagem o usuário fez este mês
    */
-  private async countImageAnalysisThisMonth(userId: string): Promise<number> {
+  private async countImageAnalysisThisMonth(
+    userId: string,
+    scope: ImageAnalysisQuotaScope,
+  ): Promise<number> {
     if (!this.deps.conversationRepo) return 0
 
     try {
@@ -838,9 +875,33 @@ Os arquivos enviados nesta conversa estão bloqueados até a assinatura ativa. N
         role: 'user',
         contentType: 'image',
         since: startOfMonth,
+        conversationAgentIds:
+          scope === 'profile' ? [...PROFILE_IMAGE_ANALYSIS_AGENT_IDS] : undefined,
+        excludeConversationAgentIds:
+          scope === 'conversation' ? [...PROFILE_IMAGE_ANALYSIS_AGENT_IDS] : undefined,
       })
     } catch {
       return 0
+    }
+  }
+
+  private resolveImageAnalysisQuota(
+    conversation: Conversation | null,
+  ): { scope: ImageAnalysisQuotaScope; label: string; limit: number } {
+    const agentId = this.getConversationAgentId(conversation)
+
+    if (agentId && PROFILE_IMAGE_ANALYSIS_AGENT_IDS.has(agentId)) {
+      return {
+        scope: 'profile',
+        label: 'perfil/Instagram',
+        limit: PROFILE_IMAGE_ANALYSIS_LIMIT,
+      }
+    }
+
+    return {
+      scope: 'conversation',
+      label: 'prints/conversas',
+      limit: CONVERSATION_IMAGE_ANALYSIS_LIMIT,
     }
   }
 
@@ -1290,7 +1351,7 @@ Os arquivos enviados nesta conversa estão bloqueados até a assinatura ativa. N
         throw new Error('Conversation not found for user')
       }
 
-      const userContext = await this.buildUserContext(user)
+      const userContext = await this.buildUserContext(user, conversation)
       const conversationAgentId = this.getConversationAgentId(conversation)
 
       if (

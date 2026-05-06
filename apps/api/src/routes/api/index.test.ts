@@ -89,6 +89,53 @@ function createConversationRepo(params?: {
       conversations.find((item) => item.id === conversationId) ?? null,
     ),
     getMessages: vi.fn(async () => messages),
+    countUserMessagesByTypeSince: vi.fn(
+      async (countParams: {
+        userId: string
+        role: 'user' | 'assistant'
+        contentType: 'text' | 'image' | 'audio'
+        conversationAgentIds?: string[]
+        excludeConversationAgentIds?: string[]
+      }) => {
+        const includeAgentIds =
+          countParams.conversationAgentIds && countParams.conversationAgentIds.length > 0
+            ? new Set(countParams.conversationAgentIds)
+            : null
+        const excludeAgentIds =
+          countParams.excludeConversationAgentIds &&
+          countParams.excludeConversationAgentIds.length > 0
+            ? new Set(countParams.excludeConversationAgentIds)
+            : null
+
+        const conversationIds = conversations
+          .filter((item) => {
+            if (item.userId !== countParams.userId) {
+              return false
+            }
+
+            const agentId =
+              typeof item.metadata?.agentId === 'string' ? item.metadata.agentId : undefined
+
+            if (includeAgentIds) {
+              return agentId ? includeAgentIds.has(agentId) : false
+            }
+
+            if (excludeAgentIds) {
+              return !agentId || !excludeAgentIds.has(agentId)
+            }
+
+            return true
+          })
+          .map((item) => item.id)
+
+        return messages.filter(
+          (message) =>
+            conversationIds.includes(message.conversationId) &&
+            message.role === countParams.role &&
+            message.contentType === countParams.contentType,
+        ).length
+      },
+    ),
     archive: vi.fn(async (conversationId: string) => {
       await params?.onArchive?.(conversationId)
     }),
@@ -181,6 +228,9 @@ function createUserRepo(
       throw new Error('Not implemented in test')
     }),
     findOrCreateByEmail: vi.fn(async () => {
+      throw new Error('Not implemented in test')
+    }),
+    linkEmail: vi.fn(async () => {
       throw new Error('Not implemented in test')
     }),
     linkPhone: vi.fn(async () => {
@@ -301,6 +351,20 @@ describe('createApiRoutes image chat flow', () => {
           hasJourneyAccess: false,
           canAnalyzeImages: false,
           hasStructuredDiagnosis: true,
+        },
+        usage: {
+          imageAnalyses: {
+            conversation: {
+              used: 0,
+              limit: 30,
+              remaining: 30,
+            },
+            profile: {
+              used: 0,
+              limit: 5,
+              remaining: 5,
+            },
+          },
         },
         commerce: {
           checkoutUrl: 'https://perpetuo.com.br/assinar',

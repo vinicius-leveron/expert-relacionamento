@@ -99,6 +99,8 @@ export interface ConversationRepository {
     role: 'user' | 'assistant'
     contentType: 'text' | 'image' | 'audio'
     since: Date
+    conversationAgentIds?: string[]
+    excludeConversationAgentIds?: string[]
   }): Promise<number>
 
   /**
@@ -319,17 +321,53 @@ export class SupabaseConversationRepository implements ConversationRepository {
     role: 'user' | 'assistant'
     contentType: 'text' | 'image' | 'audio'
     since: Date
+    conversationAgentIds?: string[]
+    excludeConversationAgentIds?: string[]
   }): Promise<number> {
     const { data: conversations } = await this.supabase
       .from('conversations')
-      .select('id')
+      .select('id, metadata')
       .eq('user_id', params.userId)
 
     if (!conversations || conversations.length === 0) {
       return 0
     }
 
-    const conversationIds = conversations.map((c) => c.id)
+    const includeAgentIds =
+      params.conversationAgentIds && params.conversationAgentIds.length > 0
+        ? new Set(params.conversationAgentIds)
+        : null
+    const excludeAgentIds =
+      params.excludeConversationAgentIds && params.excludeConversationAgentIds.length > 0
+        ? new Set(params.excludeConversationAgentIds)
+        : null
+
+    const conversationIds = conversations
+      .filter((conversation) => {
+        const metadata =
+          conversation.metadata &&
+          typeof conversation.metadata === 'object' &&
+          !Array.isArray(conversation.metadata)
+            ? (conversation.metadata as Record<string, unknown>)
+            : undefined
+        const agentId =
+          typeof metadata?.agentId === 'string' ? metadata.agentId : undefined
+
+        if (includeAgentIds) {
+          return agentId ? includeAgentIds.has(agentId) : false
+        }
+
+        if (excludeAgentIds) {
+          return !agentId || !excludeAgentIds.has(agentId)
+        }
+
+        return true
+      })
+      .map((conversation) => conversation.id)
+
+    if (conversationIds.length === 0) {
+      return 0
+    }
 
     const { count, error } = await this.supabase
       .from('messages')

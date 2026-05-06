@@ -55,6 +55,22 @@ export function createMockUserRepository(): UserRepository {
       return user
     },
 
+    async linkEmail(userId: string, email: string): Promise<User> {
+      const user = await this.findById(userId)
+      if (!user) {
+        throw new Error(`User not found: ${userId}`)
+      }
+
+      const existingWithEmail = await this.findByEmail(email)
+      if (existingWithEmail && existingWithEmail.id !== userId) {
+        throw new Error('Email already linked to another account')
+      }
+
+      const updatedUser = user.withEmail(email)
+      await this.save(updatedUser)
+      return updatedUser
+    },
+
     async linkPhone(userId: string, phoneE164: string): Promise<User> {
       const user = await this.findById(userId)
       if (!user) {

@@ -5,6 +5,7 @@ Documentos de histórias de usuário e backlog funcional do produto.
 ## Backlogs disponíveis
 
 - [Chat multimodal e arquivos](./chat-multimodal-backlog.md)
+- [Prontidão para lançamento](./launch-readiness-backlog.md)
 
 ## Próximos backlogs recomendados
 

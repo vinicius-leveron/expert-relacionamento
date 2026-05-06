@@ -207,9 +207,39 @@ class InMemoryConversationRepo implements ConversationRepository {
     role: 'user' | 'assistant'
     contentType: 'text' | 'image' | 'audio'
     since: Date
+    conversationAgentIds?: string[]
+    excludeConversationAgentIds?: string[]
   }): Promise<number> {
+    const includeAgentIds =
+      params.conversationAgentIds && params.conversationAgentIds.length > 0
+        ? new Set(params.conversationAgentIds)
+        : null
+    const excludeAgentIds =
+      params.excludeConversationAgentIds && params.excludeConversationAgentIds.length > 0
+        ? new Set(params.excludeConversationAgentIds)
+        : null
+
     const conversationIds = [...this.conversations.values()]
-      .filter((conversation) => conversation.userId === params.userId)
+      .filter((conversation) => {
+        if (conversation.userId !== params.userId) {
+          return false
+        }
+
+        const agentId =
+          typeof conversation.metadata?.agentId === 'string'
+            ? conversation.metadata.agentId
+            : undefined
+
+        if (includeAgentIds) {
+          return agentId ? includeAgentIds.has(agentId) : false
+        }
+
+        if (excludeAgentIds) {
+          return !agentId || !excludeAgentIds.has(agentId)
+        }
+
+        return true
+      })
       .map((conversation) => conversation.id)
 
     return this.messages.filter(
@@ -230,8 +260,22 @@ class InMemoryConversationRepo implements ConversationRepository {
 
   async archive(): Promise<void> {}
 
-  async seedUserImageMessages(userId: string, count: number): Promise<void> {
-    const conversation = await this.getOrCreateActive(userId, 'whatsapp')
+  async seedUserImageMessages(
+    userId: string,
+    count: number,
+    params?: {
+      channel?: string
+      metadata?: Record<string, unknown>
+    },
+  ): Promise<void> {
+    const conversation =
+      params?.metadata || params?.channel
+        ? await this.create({
+            userId,
+            channel: params.channel ?? 'app',
+            metadata: params.metadata,
+          })
+        : await this.getOrCreateActive(userId, 'whatsapp')
 
     for (let index = 0; index < count; index += 1) {
       await this.addMessage({
@@ -642,7 +686,7 @@ describe('MessagePipeline', () => {
     expect(aiProvider.calls[0]?.messages[0]?.content).toContain('RAG: LIBERADO')
   })
 
-  it('atingindo 20 imagens no mês remove a imagem do payload e informa o limite no contexto', async () => {
+  it('atingindo 30 análises de prints no mês remove a imagem do payload e informa o limite no contexto', async () => {
     const diagnosticRepo = new StubDiagnosticRepo()
     diagnosticRepo.diagnostic = {
       id: 'diagnostic-1',
@@ -664,13 +708,82 @@ describe('MessagePipeline', () => {
 
     const user = await userRepo.findOrCreateByPhone('5511999999999')
     diagnosticRepo.diagnostic.userId = user.id
-    await conversationRepo.seedUserImageMessages(user.id, 20)
+    await conversationRepo.seedUserImageMessages(user.id, 30)
 
     await pipeline.process({ any: 'payload' }, 'signature')
 
     expect(typeof aiProvider.calls[0]?.messages.at(-1)?.content).toBe('string')
     expect(aiProvider.calls[0]?.messages[0]?.content).toContain(
-      'Análises de imagem: LIMITE ATINGIDO (20/20 este mês)',
+      'Análises de imagem (prints/conversas): LIMITE ATINGIDO (30/30 este mês)',
+    )
+    expect(aiProvider.calls[0]?.messages[0]?.content).toContain(
+      'Análise de imagem: BLOQUEADA',
+    )
+  })
+
+  it('atingindo 5 análises de perfil no mês bloqueia imagem no agente de instagram', async () => {
+    const conversationRepo = new InMemoryConversationRepo()
+    const avatarProfileRepo = new StubAvatarProfileRepo()
+    avatarProfileRepo.avatarProfile = {
+      id: 'test-avatar-profile-id',
+      userId: 'placeholder',
+      status: 'completed',
+      currentPhase: null,
+      completedPhases: [1, 2, 3, 4, 5, 6, 7],
+      phaseData: {},
+      profileSummary: {
+        identity: {
+          selfImage: '',
+          idealSelf: '',
+          mainConflict: '',
+        },
+        socialRomanticPatterns: [],
+        strengths: [],
+        blockers: [],
+        values: [],
+        goals90d: [],
+        executionRisks: [],
+        recommendedNextFocus: '',
+      },
+      sourceConversationId: null,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    }
+
+    const { pipeline, aiProvider, userRepo } = createPipeline({
+      message: createTextMessage('ignorada'),
+      aiResponses: ['Resposta sem imagem por limite de perfil'],
+      conversationRepo,
+      avatarProfileRepo,
+      subscriptionRepo: new StubSubscriptionRepo(true),
+    })
+
+    const user = await userRepo.findOrCreateByPhone('5511999999999')
+    avatarProfileRepo.avatarProfile!.userId = user.id
+    await conversationRepo.seedUserImageMessages(user.id, 5, {
+      channel: 'app',
+      metadata: { agentId: 'instagram-analyzer' },
+    })
+    const conversation = await conversationRepo.create({
+      userId: user.id,
+      channel: 'app',
+      metadata: { agentId: 'instagram-analyzer' },
+    })
+
+    const result = await pipeline.processAppMessage({
+      userId: user.id,
+      conversationId: conversation.id,
+      image: {
+        data: 'base64-image',
+        mediaType: 'image/png',
+        caption: 'analisa meu instagram',
+      },
+    })
+
+    expect(result.success).toBe(true)
+    expect(typeof aiProvider.calls[0]?.messages.at(-1)?.content).toBe('string')
+    expect(aiProvider.calls[0]?.messages[0]?.content).toContain(
+      'Análises de imagem (perfil/Instagram): LIMITE ATINGIDO (5/5 este mês)',
     )
     expect(aiProvider.calls[0]?.messages[0]?.content).toContain(
       'Análise de imagem: BLOQUEADA',
@@ -1334,7 +1447,7 @@ describe('MessagePipeline', () => {
     })
 
     const user = await userRepo.findOrCreateByPhone('5511999999999')
-    avatarProfileRepo.avatarProfile.userId = user.id
+    avatarProfileRepo.avatarProfile!.userId = user.id
     const conversation = await conversationRepo.create({
       userId: user.id,
       channel: 'app',

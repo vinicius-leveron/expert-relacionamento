@@ -41,6 +41,19 @@ export interface AvatarProfile {
   updatedAt: string;
 }
 
+export interface ImageAnalysisUsageBucket {
+  used: number;
+  limit: number;
+  remaining: number;
+}
+
+export interface Usage {
+  imageAnalyses: {
+    conversation: ImageAnalysisUsageBucket;
+    profile: ImageAnalysisUsageBucket;
+  };
+}
+
 export interface Profile {
   id: string;
   email: string | null;
@@ -52,6 +65,7 @@ export interface Profile {
   avatarProfile: AvatarProfile | null;
   subscription: Subscription | null;
   access: Access;
+  usage: Usage;
   commerce: Commerce;
 }
 
