@@ -33,7 +33,7 @@ export class GeminiImageAdapter implements ImageGenerationPort {
       const response = await this.client.models.generateContent({
         model: this.model,
         contents: buildPrompt(prompt, options),
-        config: buildConfig(options),
+        config: buildConfig(this.model, options),
       })
 
       const parts = response.candidates?.[0]?.content?.parts ?? []
@@ -103,7 +103,16 @@ function buildPrompt(prompt: string, options?: ImageGenerationOptions): string {
   return parts.join(' ')
 }
 
-function buildConfig(options?: ImageGenerationOptions): GenerateContentConfig {
+function buildConfig(model: string, options?: ImageGenerationOptions): GenerateContentConfig {
+  if (supportsAspectRatioOnly(model)) {
+    return {
+      responseModalities: [Modality.IMAGE],
+      imageConfig: {
+        aspectRatio: '1:1',
+      },
+    }
+  }
+
   return {
     responseModalities: [Modality.IMAGE],
     imageConfig: {
@@ -111,6 +120,10 @@ function buildConfig(options?: ImageGenerationOptions): GenerateContentConfig {
       imageSize: mapImageSize(options),
     },
   }
+}
+
+function supportsAspectRatioOnly(model: string): boolean {
+  return model.includes('gemini-2.5-flash-image')
 }
 
 function mapImageSize(options?: ImageGenerationOptions): '512' | '1K' | '2K' {
