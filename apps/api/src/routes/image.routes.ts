@@ -46,7 +46,11 @@ export function createImageRoutes(deps: ImageRouteDependencies) {
       return c.json(subscriptionGate.body, subscriptionGate.status)
     }
 
-    const quota = await ensureImageGenerationQuota(userId, deps.usageCounterRepo)
+    const quota = await loadImageGenerationQuota({
+      userId,
+      usageCounterRepo: deps.usageCounterRepo,
+      logger: deps.logger,
+    })
     if (quota && !quota.available) {
       c.header('X-RateLimit-Remaining', '0')
       c.header('X-RateLimit-Reset', String(getCurrentPeriodResetAt()))
@@ -84,12 +88,11 @@ export function createImageRoutes(deps: ImageRouteDependencies) {
       }
 
       const result = await deps.imageService.generate(userId, body.data.prompt, options)
-      const updatedQuota = deps.usageCounterRepo
-        ? await deps.usageCounterRepo.increment({
-            userId,
-            resourceType: IMAGE_GENERATION_RESOURCE_TYPE,
-          })
-        : null
+      const updatedQuota = await incrementImageGenerationQuota({
+        userId,
+        usageCounterRepo: deps.usageCounterRepo,
+        logger: deps.logger,
+      })
       const rateLimitInfo = updatedQuota
         ? {
             remaining:
@@ -189,7 +192,11 @@ export function createImageRoutes(deps: ImageRouteDependencies) {
       })
     }
 
-    const quota = await ensureImageGenerationQuota(userId, deps.usageCounterRepo)
+    const quota = await loadImageGenerationQuota({
+      userId,
+      usageCounterRepo: deps.usageCounterRepo,
+      logger: deps.logger,
+    })
     if (!quota) {
       return c.json({
         available: true,
@@ -274,6 +281,57 @@ async function ensureImageGenerationQuota(
     userId,
     resourceType: IMAGE_GENERATION_RESOURCE_TYPE,
   })
+}
+
+async function loadImageGenerationQuota(params: {
+  userId: string
+  usageCounterRepo: UsageCounterRepository | undefined
+  logger: Logger
+}) {
+  try {
+    return await ensureImageGenerationQuota(params.userId, params.usageCounterRepo)
+  } catch (error) {
+    if (!isUsageCounterStorageUnavailable(error)) {
+      throw error
+    }
+
+    params.logger.warn(
+      { error, userId: params.userId },
+      'usage_counters table is unavailable, falling back to stateless image quota',
+    )
+    return null
+  }
+}
+
+async function incrementImageGenerationQuota(params: {
+  userId: string
+  usageCounterRepo: UsageCounterRepository | undefined
+  logger: Logger
+}) {
+  if (!params.usageCounterRepo) {
+    return null
+  }
+
+  try {
+    return await params.usageCounterRepo.increment({
+      userId: params.userId,
+      resourceType: IMAGE_GENERATION_RESOURCE_TYPE,
+    })
+  } catch (error) {
+    if (!isUsageCounterStorageUnavailable(error)) {
+      throw error
+    }
+
+    params.logger.warn(
+      { error, userId: params.userId },
+      'usage_counters table is unavailable, skipping image quota persistence',
+    )
+    return null
+  }
+}
+
+function isUsageCounterStorageUnavailable(error: unknown): boolean {
+  return error instanceof Error && error.message.includes('usage_counters')
 }
 
 function getCurrentPeriodResetAt(): number {

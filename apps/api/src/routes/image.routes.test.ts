@@ -65,6 +65,30 @@ function createUsageCounterRepo(initialCount = 0, limit = 30): UsageCounterRepos
   }
 }
 
+function createUnavailableUsageCounterRepo(): UsageCounterRepository {
+  const error = new Error(
+    "Failed to create usage counter with limit: Could not find the table 'public.usage_counters' in the schema cache",
+  )
+
+  return {
+    getUsage: vi.fn(async () => {
+      throw error
+    }),
+    increment: vi.fn(async () => {
+      throw error
+    }),
+    hasQuota: vi.fn(async () => {
+      throw error
+    }),
+    setLimit: vi.fn(async () => {
+      throw error
+    }),
+    getAllUsage: vi.fn(async () => {
+      throw error
+    }),
+  }
+}
+
 function createSubscriptionRepo(active = true): SubscriptionRepository {
   return {
     getActiveByUserId: vi.fn(async () =>
@@ -235,6 +259,56 @@ describe('createImageRoutes', () => {
       used: 7,
       remaining: 23,
       limit: 30,
+    })
+  })
+
+  it('falls back to a stateless quota response when usage_counters is unavailable', async () => {
+    const app = createApp({
+      imageService: createImageService(),
+      usageCounterRepo: createUnavailableUsageCounterRepo(),
+      subscriptionRepo: createSubscriptionRepo(true),
+    })
+
+    const response = await app.request('http://localhost/quota')
+
+    expect(response.status).toBe(200)
+    const payload = await response.json()
+    expect(payload).toMatchObject({
+      available: true,
+      used: 0,
+      remaining: 30,
+      limit: 30,
+    })
+  })
+
+  it('still generates images when usage_counters is unavailable', async () => {
+    const imageService = createImageService()
+    const app = createApp({
+      imageService,
+      usageCounterRepo: createUnavailableUsageCounterRepo(),
+      subscriptionRepo: createSubscriptionRepo(true),
+    })
+
+    const response = await app.request('http://localhost/generate', {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+      },
+      body: JSON.stringify({
+        prompt: 'um retrato editorial cinematografico',
+      }),
+    })
+
+    expect(response.status).toBe(200)
+    expect(imageService.generate).toHaveBeenCalledOnce()
+    const payload = await response.json()
+    expect(payload).toMatchObject({
+      success: true,
+      provider: 'gemini-imagen',
+      image: {
+        base64: 'ZmFrZS1pbWFnZQ==',
+        mimeType: 'image/png',
+      },
     })
   })
 })
