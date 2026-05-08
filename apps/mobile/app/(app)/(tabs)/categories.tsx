@@ -1,6 +1,8 @@
 import { useCallback, useEffect } from 'react';
 import { View, Text, StyleSheet, SafeAreaView, Platform, ActivityIndicator, TouchableOpacity } from 'react-native';
 import { router } from 'expo-router';
+import { Ionicons } from '@expo/vector-icons';
+import { LinearGradient } from 'expo-linear-gradient';
 import { useAuthStore } from '@/stores/auth.store';
 import { useChatStore } from '@/stores/chat.store';
 import { useConversationsStore } from '@/stores/conversations.store';
@@ -61,6 +63,10 @@ export default function CategoriesScreen() {
     [createConversation, prepareConversationState, chatStore],
   );
 
+  const handleOpenImageStudio = useCallback(() => {
+    router.push('/(app)/image-studio' as never);
+  }, []);
+
   if (isLoading && !profile) {
     return (
       <SafeAreaView style={styles.safeArea}>
@@ -106,6 +112,33 @@ export default function CategoriesScreen() {
           Escolha um tema e comece uma conversa guiada
         </Text>
       </View>
+
+      <TouchableOpacity
+        style={styles.heroCard}
+        activeOpacity={0.92}
+        onPress={handleOpenImageStudio}
+      >
+        <LinearGradient
+          colors={['#111827', '#4C1D95', '#FE3C72']}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 1 }}
+          style={styles.heroGradient}
+        >
+          <View style={styles.heroBadge}>
+            <Ionicons name="sparkles" size={12} color={colors.white} />
+            <Text style={styles.heroBadgeText}>Gemini no app</Text>
+          </View>
+          <Text style={styles.heroTitle}>Estúdio Visual</Text>
+          <Text style={styles.heroText}>
+            Gere imagens quadradas direto no Perpétuo e valide ideias de visual,
+            posicionamento e criativo sem sair do fluxo premium.
+          </Text>
+          <View style={styles.heroFooter}>
+            <Text style={styles.heroLimit}>Até 30 imagens por mês</Text>
+            <Ionicons name="arrow-forward" size={18} color={colors.white} />
+          </View>
+        </LinearGradient>
+      </TouchableOpacity>
 
       <ExploreGrid
         categories={EXPLORE_CATEGORIES}
@@ -155,6 +188,52 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.lg,
     paddingTop: Platform.OS === 'web' ? spacing.xl : spacing.md,
     paddingBottom: spacing.lg,
+  },
+  heroCard: {
+    marginHorizontal: spacing.lg,
+    marginBottom: spacing.lg,
+    borderRadius: 28,
+    overflow: 'hidden',
+  },
+  heroGradient: {
+    padding: spacing.lg,
+    gap: spacing.sm,
+  },
+  heroBadge: {
+    alignSelf: 'flex-start',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.xs,
+    backgroundColor: 'rgba(255,255,255,0.12)',
+    paddingHorizontal: spacing.sm,
+    paddingVertical: spacing.xs,
+    borderRadius: 999,
+  },
+  heroBadgeText: {
+    ...typography.caption,
+    color: colors.white,
+    fontFamily: 'Inter_600SemiBold',
+  },
+  heroTitle: {
+    ...typography.h1,
+    color: colors.white,
+    fontFamily: 'Inter_700Bold',
+  },
+  heroText: {
+    ...typography.bodySmall,
+    color: 'rgba(255,255,255,0.88)',
+    fontFamily: 'Inter_400Regular',
+  },
+  heroFooter: {
+    marginTop: spacing.sm,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  heroLimit: {
+    ...typography.bodySmall,
+    color: colors.white,
+    fontFamily: 'Inter_600SemiBold',
   },
   title: {
     ...typography.display,

@@ -9,6 +9,7 @@ export interface HealthRouteConfig {
     payment: boolean
     storage: boolean
     ai: boolean
+    imageGeneration: boolean
     publicUrls: boolean
   }
 }
@@ -34,6 +35,7 @@ export function createHealthRoute(config: HealthRouteConfig) {
       payment: toStatus(config.checks.payment),
       storage: toStatus(config.checks.storage),
       ai: toStatus(config.checks.ai),
+      imageGeneration: toStatus(config.checks.imageGeneration),
       publicUrls: toStatus(config.checks.publicUrls),
     }
 

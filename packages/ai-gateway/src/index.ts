@@ -78,3 +78,25 @@ export {
   type DiagnosticScores,
   type DiagnosticState,
 } from './diagnostic/index.js'
+
+// Image Generation
+export {
+  type ImageGenerationPort,
+  type ImageGenerationOptions,
+  type GeneratedImage,
+} from './ports/image-generation.port.js'
+
+export {
+  GeminiImageAdapter,
+  type GeminiImageConfig,
+  VertexAIImageAdapter,
+} from './providers/gemini-image.adapter.js'
+
+export {
+  ImageGenerationService,
+  type ImageGenerationServiceConfig,
+  type RateLimiter,
+  RateLimitExceededError,
+  InMemoryRateLimiter,
+  ImageRateLimits,
+} from './services/image-generation.service.js'

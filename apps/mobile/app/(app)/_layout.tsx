@@ -80,6 +80,12 @@ export default function AppLayout() {
           }}
         />
         <Drawer.Screen
+          name="image-studio"
+          options={{
+            drawerItemStyle: { display: 'none' },
+          }}
+        />
+        <Drawer.Screen
           name="settings"
           options={{
             drawerItemStyle: { display: 'none' },

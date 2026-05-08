@@ -13,8 +13,10 @@ import { logger as honoLogger } from 'hono/logger'
 import pino from 'pino'
 
 import { MessageEmitter } from './events/message-emitter.js'
+import { createAuthMiddleware } from './middleware/auth.middleware.js'
 import { MessagePipeline } from './pipeline/index.js'
 import { apiRateLimit, webhookRateLimit } from './middleware/index.js'
+import { createImageRoutes } from './routes/image.routes.js'
 import {
   createApiRoutes,
   createHealthRoute,
@@ -36,6 +38,7 @@ const createPersistence = async () => {
     SupabaseConversationRepository,
     SupabaseDiagnosticRepository,
     SupabaseSubscriptionRepository,
+    SupabaseUsageCounterRepository,
     SupabaseUserRepository,
   } = await import('@perpetuo/database')
   const supabase = createSupabaseClient()
@@ -47,6 +50,7 @@ const createPersistence = async () => {
     conversationRepo: new SupabaseConversationRepository(supabase),
     diagnosticRepo: new SupabaseDiagnosticRepository(supabase),
     subscriptionRepo: new SupabaseSubscriptionRepository(supabase),
+    usageCounterRepo: new SupabaseUsageCounterRepository(supabase),
   }
 }
 
@@ -132,6 +136,22 @@ const createPaymentAdapter = async () => {
   return undefined
 }
 
+const createOptionalImageService = async () => {
+  const apiKey = process.env.GOOGLE_API_KEY?.trim() || process.env.GEMINI_API_KEY?.trim()
+
+  if (!apiKey) {
+    return undefined
+  }
+
+  const { GeminiImageAdapter, ImageGenerationService } = await import('@perpetuo/ai-gateway')
+  return new ImageGenerationService({
+    primaryAdapter: new GeminiImageAdapter({
+      apiKey,
+      model: process.env.GEMINI_IMAGE_MODEL?.trim() || undefined,
+    }),
+  })
+}
+
 const logger = pino({
   level: process.env.LOG_LEVEL ?? 'info',
   transport: process.env.NODE_ENV !== 'production' ? { target: 'pino-pretty' } : undefined,
@@ -179,6 +199,7 @@ async function main() {
   let sessionRepo
   let magicLinkRepo
   let verificationCodeRepo
+  let usageCounterRepo
   let rag
   let attachmentRag
   try {
@@ -187,6 +208,7 @@ async function main() {
     conversationRepo = persistence.conversationRepo
     diagnosticRepo = persistence.diagnosticRepo
     subscriptionRepo = persistence.subscriptionRepo
+    usageCounterRepo = persistence.usageCounterRepo
     attachmentRepo = persistence.attachmentRepo
     avatarProfileRepo = persistence.avatarProfileRepo
     attachmentStorage = new ChatAttachmentStorageService(persistence.supabase)
@@ -211,6 +233,7 @@ async function main() {
 
   const transcriber = await createOptionalTranscriber()
   const paymentAdapter = await createPaymentAdapter()
+  const imageService = await createOptionalImageService()
   const emailDeliveryConfigured = isEmailDeliveryConfigured()
   const publicUrlsConfigured = Boolean(WEB_APP_URL?.trim() && APP_BASE_URL?.trim())
   const paymentConfigured = Boolean(
@@ -233,6 +256,7 @@ async function main() {
       payment: paymentConfigured,
       storage: storageConfigured,
       ai: aiConfigured,
+      imageGeneration: Boolean(imageService),
       publicUrls: publicUrlsConfigured,
     },
   })
@@ -311,6 +335,7 @@ async function main() {
       baseUrl: APP_BASE_URL,
     })
     const verificationCodeService = new VerificationCodeService(verificationCodeRepo)
+    const authMiddleware = createAuthMiddleware({ jwtService })
 
     // MessageEmitter para SSE
     const messageEmitter = new MessageEmitter()
@@ -335,6 +360,19 @@ async function main() {
       transcriber,
       paymentUrl: process.env.PAYMENT_URL,
     })
+
+    const imageApp = new Hono()
+    imageApp.use('*', authMiddleware)
+    imageApp.route(
+      '/',
+      createImageRoutes({
+        imageService,
+        usageCounterRepo,
+        subscriptionRepo,
+        logger,
+      }),
+    )
+    app.route('/api/v1/images', imageApp)
 
     app.route(
       '/api/v1',
