@@ -102,6 +102,10 @@ export function ConversationDrawer({ navigation }: DrawerContentComponentProps) 
         }
       } catch (error) {
         console.error('Erro ao arquivar conversa:', error);
+        Alert.alert(
+          'Erro',
+          'Não foi possível arquivar a conversa. Tente novamente.',
+        );
       }
     },
     [archiveConversation, activeId, handleSelectConversation, handleNewConversation]
@@ -116,7 +120,7 @@ export function ConversationDrawer({ navigation }: DrawerContentComponentProps) 
         if (agent.requiresStructuredDiagnosis && !hasStructuredDiagnosis) {
           Alert.alert(
             'Diagnóstico necessário',
-            'Conclua o Diagnóstico Pessoal antes de usar este agente.',
+            'Conclua a construção do avatar no Diagnóstico Pessoal antes de usar este agente.',
           );
           return;
         }
@@ -203,7 +207,10 @@ export function ConversationDrawer({ navigation }: DrawerContentComponentProps) 
       />
 
       {/* Agents Section */}
-      <AgentsList onSelectAgent={handleSelectAgent} />
+      <AgentsList
+        onSelectAgent={handleSelectAgent}
+        hasStructuredDiagnosis={profile?.access.hasStructuredDiagnosis ?? false}
+      />
 
       {/* Section Title */}
       <Text style={styles.sectionTitle}>Conversas Recentes</Text>

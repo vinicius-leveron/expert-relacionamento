@@ -187,7 +187,12 @@ export const useConversationsStore = create<ConversationsState>((set, get) => ({
     }));
 
     try {
-      await api.delete(`/conversations/${id}`);
+      const response = await api.delete<{ success: boolean }>(`/conversations/${id}`);
+
+      // Verifica se a resposta foi bem sucedida
+      if (!response.data.success) {
+        throw new Error('Falha ao arquivar conversa');
+      }
 
       // Se a conversa ativa foi arquivada, limpar activeId
       if (activeId === id) {

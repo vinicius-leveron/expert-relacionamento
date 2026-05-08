@@ -17,34 +17,40 @@ const COLLAPSED_HEIGHT = 0;
 
 interface AgentsListProps {
   onSelectAgent: (agent: SpecializedAgent) => void | Promise<void>;
+  hasStructuredDiagnosis?: boolean;
 }
 
 function AgentListItem({
   agent,
   onPress,
+  isLocked,
 }: {
   agent: SpecializedAgent;
   onPress: () => void;
+  isLocked: boolean;
 }) {
   return (
     <TouchableOpacity
-      style={styles.agentItem}
+      style={[styles.agentItem, isLocked && styles.agentItemLocked]}
       onPress={onPress}
       activeOpacity={0.7}
-      accessibilityLabel={agent.name}
+      accessibilityLabel={`${agent.name}${isLocked ? ' - requer diagnóstico' : ''}`}
       accessibilityRole="button"
     >
-      <View style={[styles.agentIcon, { backgroundColor: `${agent.color}20` }]}>
-        <Ionicons name={agent.icon} size={18} color={agent.color} />
+      <View style={[styles.agentIcon, { backgroundColor: `${agent.color}${isLocked ? '10' : '20'}` }]}>
+        <Ionicons name={agent.icon} size={18} color={isLocked ? colors.textMuted : agent.color} />
       </View>
-      <Text style={styles.agentName} numberOfLines={1}>
+      <Text style={[styles.agentName, isLocked && styles.agentNameLocked]} numberOfLines={1}>
         {agent.name}
       </Text>
+      {isLocked && (
+        <Ionicons name="lock-closed" size={14} color={colors.textMuted} />
+      )}
     </TouchableOpacity>
   );
 }
 
-export function AgentsList({ onSelectAgent }: AgentsListProps) {
+export function AgentsList({ onSelectAgent, hasStructuredDiagnosis = false }: AgentsListProps) {
   const [isExpanded, setIsExpanded] = useState(false);
   const expandedHeight = SPECIALIZED_AGENTS.length * ITEM_HEIGHT;
   const heightAnim = useRef(new Animated.Value(COLLAPSED_HEIGHT)).current;
@@ -95,6 +101,7 @@ export function AgentsList({ onSelectAgent }: AgentsListProps) {
             key={agent.id}
             agent={agent}
             onPress={() => onSelectAgent(agent)}
+            isLocked={agent.requiresStructuredDiagnosis && !hasStructuredDiagnosis}
           />
         ))}
       </Animated.View>
@@ -142,5 +149,11 @@ const styles = StyleSheet.create({
     color: colors.textPrimary,
     fontFamily: 'Inter_400Regular',
     flex: 1,
+  },
+  agentItemLocked: {
+    opacity: 0.6,
+  },
+  agentNameLocked: {
+    color: colors.textMuted,
   },
 });

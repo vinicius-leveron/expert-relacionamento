@@ -68,6 +68,10 @@ export function parseMessage(content: string): ParsedMessage {
   const components: ParsedComponent[] = [];
   let text = content;
 
+  // Remove qualquer vazamento de PERPETUO_STATE do conteúdo
+  text = text.replace(/\[\[PERPETUO_STATE\]\][\s\S]*?\[\[\/PERPETUO_STATE\]\]/g, '');
+  text = text.replace(/\[\[PERPETUO_STATE\]\][\s\S]*?(?=\n\n|$)/g, '');
+
   // Extrair QUICK_REPLIES
   const quickRepliesMatches = text.matchAll(COMPONENT_PATTERNS.quick_replies);
   for (const match of quickRepliesMatches) {

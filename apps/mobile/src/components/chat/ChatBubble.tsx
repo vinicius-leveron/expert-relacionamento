@@ -22,6 +22,7 @@ import {
   type ArchetypeCardData,
   type DayCardData,
 } from '@/utils/message-parser';
+import { MarkdownText } from '@/utils/markdown-renderer';
 import { QuickReplyButtons } from './QuickReplyButtons';
 import { ArchetypeCard } from './ArchetypeCard';
 import { JourneyCard } from './JourneyCard';
@@ -387,15 +388,27 @@ export function ChatBubble({
           )}
 
           {hasContent && (
-            <Text
-              style={[
-                styles.text,
-                isUser ? styles.userText : styles.assistantText,
-                attachments.length > 0 || image?.url || audio?.url ? styles.textWithAttachments : null,
-              ]}
-            >
-              {isUser ? content : parsed.text}
-            </Text>
+            isUser ? (
+              <Text
+                style={[
+                  styles.text,
+                  styles.userText,
+                  attachments.length > 0 || image?.url || audio?.url ? styles.textWithAttachments : null,
+                ]}
+              >
+                {content}
+              </Text>
+            ) : (
+              <MarkdownText
+                style={[
+                  styles.text,
+                  styles.assistantText,
+                  attachments.length > 0 || image?.url || audio?.url ? styles.textWithAttachments : null,
+                ]}
+              >
+                {parsed.text}
+              </MarkdownText>
+            )
           )}
 
           {/* Componentes interativos extraídos da mensagem */}

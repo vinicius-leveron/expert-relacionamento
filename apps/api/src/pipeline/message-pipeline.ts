@@ -997,13 +997,19 @@ Os arquivos enviados nesta conversa estão bloqueados até a assinatura ativa. N
     content: string
     profileUpdate: AvatarProfileUpdatePayload | null
   } {
+    // Padrão principal: tag de abertura e fechamento corretas
     const pattern = /\[\[PERPETUO_STATE\]\]([\s\S]*?)\[\[\/PERPETUO_STATE\]\]/
     const match = pattern.exec(content)
-    const cleanedContent = content.replace(pattern, '').trim()
+    let cleanedContent = content.replace(pattern, '').trim()
+
+    // Padrão de fallback: captura casos mal formatados (sem tag de fechamento)
+    // Remove qualquer coisa que comece com [[PERPETUO_STATE]] até o fim da linha ou próximo parágrafo
+    const fallbackPattern = /\[\[PERPETUO_STATE\]\][\s\S]*?(?=\n\n|$)/g
+    cleanedContent = cleanedContent.replace(fallbackPattern, '').trim()
 
     if (!match?.[1]) {
       return {
-        content: content.trim(),
+        content: cleanedContent,
         profileUpdate: null,
       }
     }
