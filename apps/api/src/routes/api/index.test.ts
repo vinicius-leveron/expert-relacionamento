@@ -9,6 +9,7 @@ import type {
   SupabaseDiagnosticRepository,
   SupabaseSessionRepository,
   SupabaseSubscriptionRepository,
+  UsageCounterRepository,
 } from '@perpetuo/database'
 import type { ChatAttachmentStorageService } from '../../services/chat-attachment-storage.service.js'
 import type { MessagePipeline } from '../../pipeline/message-pipeline.js'
@@ -187,6 +188,62 @@ function createAttachmentStorage(overrides?: Partial<ChatAttachmentStorageServic
   } as unknown as ChatAttachmentStorageService
 }
 
+function createUsageCounterRepo(params?: {
+  used?: number
+  limit?: number
+}) {
+  let counter =
+    params?.limit !== undefined || params?.used !== undefined
+      ? {
+          used: params?.used ?? 0,
+          limit: params?.limit ?? 10,
+        }
+      : null
+
+  return {
+    getUsage: vi.fn(async () =>
+      counter
+        ? {
+            id: 'usage-1',
+            userId: 'user-1',
+            resourceType: 'chat_image_generation',
+            resourceId: null,
+            period: '2026-05',
+            count: counter.used,
+            limitValue: counter.limit,
+            createdAt: new Date('2026-05-01T00:00:00.000Z'),
+            updatedAt: new Date('2026-05-01T00:00:00.000Z'),
+          }
+        : null,
+    ),
+    setLimit: vi.fn(async ({ limit }: { limit: number }) => {
+      counter = {
+        used: counter?.used ?? 0,
+        limit,
+      }
+    }),
+    hasQuota: vi.fn(async () => ({
+      available: (counter?.used ?? 0) < (counter?.limit ?? 10),
+      remaining: Math.max((counter?.limit ?? 10) - (counter?.used ?? 0), 0),
+      used: counter?.used ?? 0,
+      limit: counter?.limit ?? 10,
+    })),
+    increment: vi.fn(async () => {
+      counter = {
+        used: (counter?.used ?? 0) + 1,
+        limit: counter?.limit ?? 10,
+      }
+
+      return {
+        count: counter.used,
+        limit: counter.limit,
+        exceeded: counter.used > counter.limit,
+      }
+    }),
+    getAllUsage: vi.fn(async () => []),
+  } as unknown as UsageCounterRepository
+}
+
 function createAppPipeline(overrides?: Partial<MessagePipeline>) {
   return {
     processAppMessage: vi.fn(async () => ({ success: true })),
@@ -245,6 +302,7 @@ function createRoutes(params?: {
   subscriptionRepo?: SupabaseSubscriptionRepository
   avatarProfileRepo?: SupabaseAvatarProfileRepository
   attachmentStorage?: ChatAttachmentStorageService
+  usageCounterRepo?: UsageCounterRepository
   appPipeline?: MessagePipeline
   paymentUrl?: string
   userRepo?: UserRepository
@@ -261,6 +319,7 @@ function createRoutes(params?: {
     subscriptionRepo: params?.subscriptionRepo,
     avatarProfileRepo: params?.avatarProfileRepo,
     attachmentStorage: params?.attachmentStorage,
+    usageCounterRepo: params?.usageCounterRepo,
     appPipeline: params?.appPipeline,
     paymentUrl: params?.paymentUrl,
     logger: pino({ enabled: false }),
@@ -365,11 +424,50 @@ describe('createApiRoutes image chat flow', () => {
               remaining: 5,
             },
           },
+          imageGenerations: {
+            chat: {
+              used: 0,
+              limit: 10,
+              remaining: 10,
+            },
+          },
         },
         commerce: {
           checkoutUrl: 'https://perpetuo.com.br/assinar',
           nativeCheckoutMode: 'external_link',
           canUpgrade: true,
+        },
+      },
+    })
+  })
+
+  it('expõe a quota de geração de imagem do chat no profile', async () => {
+    const app = createRoutes({
+      usageCounterRepo: createUsageCounterRepo({
+        used: 3,
+        limit: 10,
+      }),
+    })
+
+    const response = await app.request('http://localhost/profile', {
+      method: 'GET',
+      headers: {
+        Authorization: 'Bearer test-token',
+      },
+    })
+
+    expect(response.status).toBe(200)
+    expect(await response.json()).toMatchObject({
+      success: true,
+      data: {
+        usage: {
+          imageGenerations: {
+            chat: {
+              used: 3,
+              limit: 10,
+              remaining: 7,
+            },
+          },
         },
       },
     })
@@ -817,6 +915,47 @@ describe('createApiRoutes image chat flow', () => {
           id: 'message-1',
           contentType: 'image',
           image: null,
+        },
+      ],
+    })
+  })
+
+  it('retorna imagem gerada pelo assistant com signed URL no histórico da conversa', async () => {
+    const conversationRepo = createConversationRepo({
+      messages: [
+        createMessage({
+          role: 'assistant',
+          content: 'Aqui está a imagem que criei para você.',
+          contentType: 'image',
+          metadata: {
+            imageStoragePath: 'users/user-1/conversations/conversation-1/generated-images/image-1.png',
+            imageMimeType: 'image/png',
+          },
+        }),
+      ],
+    })
+    const attachmentStorage = createAttachmentStorage()
+    const app = createRoutes({ conversationRepo, attachmentStorage })
+
+    const response = await app.request('http://localhost/conversations/conversation-1/messages', {
+      method: 'GET',
+      headers: {
+        Authorization: 'Bearer test-token',
+      },
+    })
+
+    expect(response.status).toBe(200)
+    expect(await response.json()).toMatchObject({
+      success: true,
+      data: [
+        {
+          id: 'message-1',
+          role: 'assistant',
+          contentType: 'image',
+          image: {
+            url: expect.stringContaining('generated-images'),
+            mimeType: 'image/png',
+          },
         },
       ],
     })

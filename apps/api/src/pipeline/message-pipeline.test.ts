@@ -21,6 +21,8 @@ import type {
   Message,
   Subscription,
   SubscriptionRepository,
+  UsageCounter,
+  UsageCounterRepository,
 } from '@perpetuo/database'
 import { createMockUserRepository } from '../repositories/mock-user.repository.js'
 import { MessagePipeline } from './message-pipeline.js'
@@ -448,6 +450,147 @@ class StubAvatarProfileRepo implements AvatarProfileRepository {
   }
 }
 
+class InMemoryUsageCounterRepo implements UsageCounterRepository {
+  readonly incrementCalls: Array<{ userId: string; resourceType: string }> = []
+
+  private readonly counters = new Map<string, UsageCounter>()
+
+  private getPeriod(period?: string): string {
+    if (period) {
+      return period
+    }
+
+    const now = new Date()
+    return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`
+  }
+
+  private getKey(params: {
+    userId: string
+    resourceType: string
+    resourceId?: string
+    period?: string
+  }): string {
+    return [
+      params.userId,
+      params.resourceType,
+      params.resourceId ?? 'null',
+      this.getPeriod(params.period),
+    ].join(':')
+  }
+
+  async getUsage(params: {
+    userId: string
+    resourceType: string
+    resourceId?: string
+    period?: string
+  }): Promise<UsageCounter | null> {
+    return this.counters.get(this.getKey(params)) ?? null
+  }
+
+  async increment(params: {
+    userId: string
+    resourceType: string
+    resourceId?: string
+    period?: string
+    amount?: number
+  }): Promise<{ count: number; limit: number | null; exceeded: boolean }> {
+    this.incrementCalls.push({ userId: params.userId, resourceType: params.resourceType })
+
+    const key = this.getKey(params)
+    const existing = this.counters.get(key)
+    const nextCount = (existing?.count ?? 0) + (params.amount ?? 1)
+    const nextCounter: UsageCounter = existing
+      ? {
+          ...existing,
+          count: nextCount,
+          updatedAt: new Date(),
+        }
+      : {
+          id: `usage-${this.counters.size + 1}`,
+          userId: params.userId,
+          resourceType: params.resourceType,
+          resourceId: params.resourceId ?? null,
+          period: this.getPeriod(params.period),
+          count: nextCount,
+          limitValue: null,
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        }
+
+    this.counters.set(key, nextCounter)
+
+    return {
+      count: nextCount,
+      limit: nextCounter.limitValue,
+      exceeded: nextCounter.limitValue !== null && nextCount > nextCounter.limitValue,
+    }
+  }
+
+  async hasQuota(params: {
+    userId: string
+    resourceType: string
+    resourceId?: string
+    period?: string
+  }): Promise<{ available: boolean; remaining: number | null; used: number; limit: number | null }> {
+    const usage = await this.getUsage(params)
+    if (!usage) {
+      return {
+        available: true,
+        remaining: null,
+        used: 0,
+        limit: null,
+      }
+    }
+
+    if (usage.limitValue === null) {
+      return {
+        available: true,
+        remaining: null,
+        used: usage.count,
+        limit: null,
+      }
+    }
+
+    return {
+      available: usage.count < usage.limitValue,
+      remaining: Math.max(usage.limitValue - usage.count, 0),
+      used: usage.count,
+      limit: usage.limitValue,
+    }
+  }
+
+  async setLimit(params: {
+    userId: string
+    resourceType: string
+    resourceId?: string
+    period?: string
+    limit: number
+  }): Promise<void> {
+    const key = this.getKey(params)
+    const existing = this.counters.get(key)
+    const now = new Date()
+
+    this.counters.set(key, {
+      id: existing?.id ?? `usage-${this.counters.size + 1}`,
+      userId: params.userId,
+      resourceType: params.resourceType,
+      resourceId: params.resourceId ?? null,
+      period: this.getPeriod(params.period),
+      count: existing?.count ?? 0,
+      limitValue: params.limit,
+      createdAt: existing?.createdAt ?? now,
+      updatedAt: now,
+    })
+  }
+
+  async getAllUsage(userId: string, period?: string): Promise<UsageCounter[]> {
+    const expectedPeriod = this.getPeriod(period)
+    return [...this.counters.values()].filter(
+      (counter) => counter.userId === userId && counter.period === expectedPeriod,
+    )
+  }
+}
+
 function createTextMessage(text: string): IncomingMessage {
   return {
     externalId: 'incoming-1',
@@ -482,9 +625,31 @@ function createPipeline(params: {
   avatarProfileRepo?: StubAvatarProfileRepo
   inlineImageStorage?: {
     removeObject(path: string): Promise<void>
+    uploadBuffer?(params: { path: string; data: Buffer; contentType: string }): Promise<{ path: string }>
+    createSignedReadUrl?(path: string): Promise<string>
   }
   transcriber?: {
     transcribe(audioUrl: string): Promise<string>
+  }
+  usageCounterRepo?: UsageCounterRepository
+  imageService?: {
+    generate(
+      userId: string,
+      prompt: string,
+      options?: {
+        size?: '256x256' | '512x512' | '1024x1024'
+        style?: 'vivid' | 'natural'
+        quality?: 'standard' | 'hd'
+      },
+    ): Promise<{
+      image: {
+        url?: string
+        base64?: string
+        mimeType?: string
+        revisedPrompt?: string
+      }
+      provider: string
+    }>
   }
   rag?: {
     searchCalls: string[]
@@ -558,6 +723,8 @@ function createPipeline(params: {
     attachmentRepo: params.attachmentRepo as unknown as AttachmentRepository,
     attachmentRag: params.attachmentRag as never,
     transcriber: params.transcriber,
+    usageCounterRepo: params.usageCounterRepo,
+    imageService: params.imageService as never,
     inlineImageStorage: params.inlineImageStorage,
     paymentUrl: 'https://perpetuo.com.br/assinar',
   })
@@ -1206,6 +1373,267 @@ describe('MessagePipeline', () => {
     expect((channel.sentMessages[0]?.content as { text: string }).text).toContain(
       'faz parte da assinatura',
     )
+  })
+
+  it('processAppMessage detecta pedido claro de geração de imagem no chat e persiste resposta como assistant image', async () => {
+    const conversationRepo = new InMemoryConversationRepo()
+    const usageCounterRepo = new InMemoryUsageCounterRepo()
+    const inlineImageStorage = {
+      removeObject: vi.fn(async () => {}),
+      uploadBuffer: vi.fn(async ({ path }: { path: string }) => ({ path })),
+      createSignedReadUrl: vi.fn(async (path: string) => `https://cdn.test/${path}`),
+    }
+    const imageService = {
+      generate: vi.fn(async () => ({
+        image: {
+          base64: Buffer.from('generated-image').toString('base64'),
+          mimeType: 'image/png',
+          revisedPrompt: 'Capa editorial minimalista com clima de recomeço.',
+        },
+        provider: 'gemini-2.5-flash-image',
+      })),
+    }
+    const { pipeline, aiProvider, channel, userRepo } = createPipeline({
+      message: createTextMessage('ignorada'),
+      aiResponses: [
+        '{"decision":"generate_image","confidence":"high","prompt":"Capa editorial minimalista com clima de recomeço para uma conversa sobre autoestima.","style":"vivid","quality":"standard"}',
+      ],
+      conversationRepo,
+      usageCounterRepo,
+      imageService,
+      inlineImageStorage,
+    })
+
+    const user = await userRepo.findOrCreateByPhone('5511999999999')
+    const conversation = await conversationRepo.create({ userId: user.id, channel: 'app' })
+
+    const result = await pipeline.processAppMessage({
+      userId: user.id,
+      conversationId: conversation.id,
+      content: 'cria uma capa pra esse momento de recomeço com estética editorial',
+    })
+
+    expect(result.success).toBe(true)
+    expect(aiProvider.calls).toHaveLength(1)
+    expect(imageService.generate).toHaveBeenCalledWith(
+      user.id,
+      'Capa editorial minimalista com clima de recomeço para uma conversa sobre autoestima.',
+      expect.objectContaining({
+        style: 'vivid',
+        quality: 'standard',
+        size: '1024x1024',
+      }),
+    )
+    expect(inlineImageStorage.uploadBuffer).toHaveBeenCalledWith(
+      expect.objectContaining({
+        path: expect.stringContaining('/generated-images/'),
+        contentType: 'image/png',
+      }),
+    )
+    expect(usageCounterRepo.incrementCalls).toEqual([
+      { userId: user.id, resourceType: 'chat_image_generation' },
+    ])
+    expect(channel.sentMessages[0]?.content).toMatchObject({
+      type: 'image',
+      caption: 'Aqui está a imagem que criei para você.',
+    })
+    expect((channel.sentMessages[0]?.content as { url: string }).url).toContain('https://cdn.test/')
+
+    const messages = await conversationRepo.getMessages(conversation.id)
+    expect(messages).toHaveLength(2)
+    expect(messages[0]).toMatchObject({
+      role: 'user',
+      contentType: 'text',
+      content: 'cria uma capa pra esse momento de recomeço com estética editorial',
+    })
+    expect(messages[1]).toMatchObject({
+      role: 'assistant',
+      contentType: 'image',
+      content: 'Aqui está a imagem que criei para você.',
+      metadata: expect.objectContaining({
+        imageStoragePath: expect.stringContaining('/generated-images/'),
+        imageMimeType: 'image/png',
+        imagePrompt:
+          'Capa editorial minimalista com clima de recomeço para uma conversa sobre autoestima.',
+        imageProvider: 'gemini-2.5-flash-image',
+      }),
+    })
+  })
+
+  it('processAppMessage cai no fluxo normal de reply quando a classificação não pede imagem', async () => {
+    const conversationRepo = new InMemoryConversationRepo()
+    const usageCounterRepo = new InMemoryUsageCounterRepo()
+    const imageService = {
+      generate: vi.fn(async () => {
+        throw new Error('não deveria gerar')
+      }),
+    }
+    const { pipeline, aiProvider, channel, userRepo } = createPipeline({
+      message: createTextMessage('ignorada'),
+      aiResponses: [
+        '{"decision":"reply","confidence":"low"}',
+        'Resposta conversacional normal.',
+      ],
+      conversationRepo,
+      usageCounterRepo,
+      imageService,
+      inlineImageStorage: {
+        removeObject: vi.fn(async () => {}),
+        uploadBuffer: vi.fn(async ({ path }: { path: string }) => ({ path })),
+        createSignedReadUrl: vi.fn(async (path: string) => `https://cdn.test/${path}`),
+      },
+    })
+
+    const user = await userRepo.findOrCreateByPhone('5511999999999')
+    const conversation = await conversationRepo.create({ userId: user.id, channel: 'app' })
+
+    const result = await pipeline.processAppMessage({
+      userId: user.id,
+      conversationId: conversation.id,
+      content: 'me ajuda a responder essa mensagem sem parecer carente',
+    })
+
+    expect(result.success).toBe(true)
+    expect(aiProvider.calls).toHaveLength(2)
+    expect(imageService.generate).not.toHaveBeenCalled()
+    expect(channel.sentMessages[0]?.content).toMatchObject({
+      type: 'text',
+      text: 'Resposta conversacional normal.',
+    })
+  })
+
+  it('processAppMessage não roda o classificador de imagem quando a mensagem inclui anexos', async () => {
+    const conversationRepo = new InMemoryConversationRepo()
+    const imageService = {
+      generate: vi.fn(async () => {
+        throw new Error('não deveria gerar')
+      }),
+    }
+    const { pipeline, aiProvider, userRepo } = createPipeline({
+      message: createTextMessage('ignorada'),
+      aiResponses: ['Resposta baseada no anexo'],
+      conversationRepo,
+      imageService,
+      inlineImageStorage: {
+        removeObject: vi.fn(async () => {}),
+        uploadBuffer: vi.fn(async ({ path }: { path: string }) => ({ path })),
+        createSignedReadUrl: vi.fn(async (path: string) => `https://cdn.test/${path}`),
+      },
+    })
+
+    const user = await userRepo.findOrCreateByPhone('5511999999999')
+    const conversation = await conversationRepo.create({ userId: user.id, channel: 'app' })
+
+    const result = await pipeline.processAppMessage({
+      userId: user.id,
+      conversationId: conversation.id,
+      content: 'resuma esses arquivos',
+      attachmentIds: ['attachment-1'],
+    })
+
+    expect(result.success).toBe(true)
+    expect(aiProvider.calls).toHaveLength(1)
+    expect(imageService.generate).not.toHaveBeenCalled()
+  })
+
+  it('processAppMessage responde em texto e não consome quota quando a geração falha', async () => {
+    const conversationRepo = new InMemoryConversationRepo()
+    const usageCounterRepo = new InMemoryUsageCounterRepo()
+    const imageService = {
+      generate: vi.fn(async () => {
+        throw new Error('gemini indisponível')
+      }),
+    }
+    const { pipeline, channel, userRepo } = createPipeline({
+      message: createTextMessage('ignorada'),
+      aiResponses: [
+        '{"decision":"generate_image","confidence":"high","prompt":"Poster clean sobre recomeço emocional.","style":"vivid","quality":"standard"}',
+      ],
+      conversationRepo,
+      usageCounterRepo,
+      imageService,
+      inlineImageStorage: {
+        removeObject: vi.fn(async () => {}),
+        uploadBuffer: vi.fn(async ({ path }: { path: string }) => ({ path })),
+        createSignedReadUrl: vi.fn(async (path: string) => `https://cdn.test/${path}`),
+      },
+    })
+
+    const user = await userRepo.findOrCreateByPhone('5511999999999')
+    const conversation = await conversationRepo.create({ userId: user.id, channel: 'app' })
+
+    const result = await pipeline.processAppMessage({
+      userId: user.id,
+      conversationId: conversation.id,
+      content: 'gera um poster clean sobre recomeço emocional',
+    })
+
+    expect(result.success).toBe(true)
+    expect(imageService.generate).toHaveBeenCalledTimes(1)
+    expect(usageCounterRepo.incrementCalls).toHaveLength(0)
+    expect(channel.sentMessages[0]?.content).toMatchObject({
+      type: 'text',
+    })
+
+    const messages = await conversationRepo.getMessages(conversation.id)
+    expect(messages.at(-1)).toMatchObject({
+      role: 'assistant',
+      contentType: 'text',
+    })
+  })
+
+  it('processAppMessage bloqueia a geração de imagem no chat quando a quota mensal está esgotada', async () => {
+    const conversationRepo = new InMemoryConversationRepo()
+    const usageCounterRepo = new InMemoryUsageCounterRepo()
+    const imageService = {
+      generate: vi.fn(async () => ({
+        image: { base64: 'abc', mimeType: 'image/png' },
+        provider: 'gemini-2.5-flash-image',
+      })),
+    }
+    const { pipeline, channel, userRepo } = createPipeline({
+      message: createTextMessage('ignorada'),
+      aiResponses: [
+        '{"decision":"generate_image","confidence":"high","prompt":"Ilustração sobre autoconfiança.","style":"vivid","quality":"standard"}',
+      ],
+      conversationRepo,
+      usageCounterRepo,
+      imageService,
+      inlineImageStorage: {
+        removeObject: vi.fn(async () => {}),
+        uploadBuffer: vi.fn(async ({ path }: { path: string }) => ({ path })),
+        createSignedReadUrl: vi.fn(async (path: string) => `https://cdn.test/${path}`),
+      },
+    })
+
+    const user = await userRepo.findOrCreateByPhone('5511999999999')
+    const conversation = await conversationRepo.create({ userId: user.id, channel: 'app' })
+    await usageCounterRepo.setLimit({
+      userId: user.id,
+      resourceType: 'chat_image_generation',
+      limit: 10,
+    })
+    for (let index = 0; index < 10; index += 1) {
+      await usageCounterRepo.increment({
+        userId: user.id,
+        resourceType: 'chat_image_generation',
+      })
+    }
+
+    const result = await pipeline.processAppMessage({
+      userId: user.id,
+      conversationId: conversation.id,
+      content: 'cria uma ilustração sobre autoconfiança',
+    })
+
+    expect(result.success).toBe(true)
+    expect(imageService.generate).not.toHaveBeenCalled()
+    expect(channel.sentMessages[0]?.content).toMatchObject({
+      type: 'text',
+    })
+
+    const messages = await conversationRepo.getMessages(conversation.id)
+    expect(messages.at(-1)?.content).toContain('10 gerações de imagem no chat')
   })
 
   it('processAppMessage envia imagem do app como payload multimodal para a IA', async () => {

@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto'
 import {
   ATTACHMENT_CITATION_SYSTEM_ADDITION,
   type AttachmentRAGService,
@@ -7,11 +8,13 @@ import {
   ContextBuilder,
   type ConversationHistory,
   DIAGNOSIS_INTRO,
+  ImageGenerationService,
   getAgentSystemPrompt,
   IMAGE_ANALYSIS_SYSTEM_ADDITION,
   ISABELA_GREETING,
   ISABELA_RETURNING,
   isAgentId,
+  type ImageGenerationOptions,
   type RAGService,
   type UserContext,
   getJourneyPrompt,
@@ -36,9 +39,14 @@ import type {
   Conversation,
   DiagnosticRepository,
   SubscriptionRepository,
+  UsageCounterRepository,
 } from '@perpetuo/database'
 import { createEmptyAvatarProfileSummary } from '@perpetuo/database'
 import type { Logger } from 'pino'
+import {
+  incrementMonthlyQuota,
+  loadMonthlyQuota,
+} from '../services/monthly-usage-quota.service.js'
 import { DiagnosticHandler } from './diagnostic-handler.js'
 
 export interface PipelineContext {
@@ -74,8 +82,16 @@ export interface PipelineDependencies {
   avatarProfileRepo?: AvatarProfileRepository
   diagnosticRepo?: DiagnosticRepository
   subscriptionRepo?: SubscriptionRepository
+  usageCounterRepo?: UsageCounterRepository
+  imageService?: ImageGenerationService
   inlineImageStorage?: {
     removeObject(path: string): Promise<void>
+    uploadBuffer?(params: {
+      path: string
+      data: Buffer
+      contentType: string
+    }): Promise<{ path: string; fullPath?: string }>
+    createSignedReadUrl?(path: string, expiresInSeconds?: number): Promise<string>
   }
   /** URL para redirecionamento de pagamento */
   paymentUrl?: string
@@ -128,9 +144,38 @@ export interface AppMessageParams {
 
 const CONVERSATION_IMAGE_ANALYSIS_LIMIT = 30
 const PROFILE_IMAGE_ANALYSIS_LIMIT = 5
+const CHAT_IMAGE_GENERATION_RESOURCE_TYPE = 'chat_image_generation'
+const CHAT_IMAGE_GENERATION_MONTHLY_LIMIT = 10
+const CHAT_IMAGE_GENERATION_DEFAULT_OPTIONS: ImageGenerationOptions = {
+  style: 'vivid',
+  quality: 'standard',
+  size: '1024x1024',
+}
+const CHAT_IMAGE_GENERATION_ASSISTANT_COPY = 'Aqui está a imagem que criei para você.'
 const PROFILE_IMAGE_ANALYSIS_AGENT_IDS = new Set<AgentId>(['instagram-analyzer'])
 
 type ImageAnalysisQuotaScope = 'conversation' | 'profile'
+type ChatImageGenerationDecision = 'reply' | 'generate_image'
+
+interface ChatImageGenerationIntent {
+  decision: ChatImageGenerationDecision
+  confidence: 'low' | 'medium' | 'high'
+  prompt?: string
+  style?: 'vivid' | 'natural'
+  quality?: 'standard' | 'hd'
+}
+
+function getGeneratedImageExtension(mediaType: string): string {
+  switch (mediaType) {
+    case 'image/jpeg':
+      return '.jpg'
+    case 'image/webp':
+      return '.webp'
+    case 'image/png':
+    default:
+      return '.png'
+  }
+}
 
 /**
  * MessagePipeline - Orquestra o processamento de mensagens
@@ -686,6 +731,378 @@ Os arquivos enviados nesta conversa estão bloqueados até a assinatura ativa. N
         outputTokens: result.usage.outputTokens,
       },
     })
+  }
+
+  private async saveAIImageResponse(
+    conversationId: string | undefined,
+    params: {
+      content: string
+      imageStoragePath: string
+      imageMimeType: string
+      prompt: string
+      provider: string
+      style: 'vivid' | 'natural'
+      quality: 'standard' | 'hd'
+      revisedPrompt?: string
+    },
+  ): Promise<void> {
+    if (!conversationId || !this.deps.conversationRepo) return
+
+    await this.deps.conversationRepo.addMessage({
+      conversationId,
+      role: 'assistant',
+      content: params.content,
+      contentType: 'image',
+      metadata: {
+        imageStoragePath: params.imageStoragePath,
+        imageMimeType: params.imageMimeType,
+        imagePrompt: params.prompt,
+        imageProvider: params.provider,
+        imageStyle: params.style,
+        imageQuality: params.quality,
+        revisedPrompt: params.revisedPrompt,
+      },
+    })
+  }
+
+  private shouldAttemptAppChatImageGeneration(params: {
+    content: string
+    hasImage: boolean
+    hasAudio: boolean
+    attachmentIds?: string[]
+    conversationId: string
+  }): boolean {
+    return (
+      params.content.length > 0 &&
+      !params.hasImage &&
+      !params.hasAudio &&
+      (!params.attachmentIds || params.attachmentIds.length === 0) &&
+      Boolean(this.deps.imageService) &&
+      Boolean(this.deps.inlineImageStorage?.uploadBuffer) &&
+      Boolean(this.deps.inlineImageStorage?.createSignedReadUrl) &&
+      Boolean(this.deps.conversationRepo) &&
+      Boolean(params.conversationId)
+    )
+  }
+
+  private async classifyChatImageGenerationIntent(params: {
+    conversation: Conversation
+    messageText: string
+  }): Promise<ChatImageGenerationIntent> {
+    const recentMessages = await this.deps.conversationRepo?.getRecentMessages(params.conversation.id, 6)
+    const recentTranscript =
+      recentMessages && recentMessages.length > 0
+        ? recentMessages
+            .map((message) => {
+              const contentTypeLabel =
+                message.contentType === 'image'
+                  ? '[imagem] '
+                  : message.contentType === 'audio'
+                    ? '[audio] '
+                    : ''
+              return `${message.role === 'user' ? 'Usuário' : 'Assistente'}: ${contentTypeLabel}${message.content}`
+            })
+            .join('\n')
+        : 'Sem histórico recente relevante.'
+
+    const summary = params.conversation.summary?.trim()
+    const result = await this.deps.aiProvider.complete(
+      [
+        {
+          role: 'system',
+          content: [
+            'Você é um classificador determinístico para um chat de relacionamentos.',
+            'Sua tarefa é decidir se a mensagem atual pede criação de UMA imagem nova a partir de texto.',
+            'Use "generate_image" apenas quando o usuário quer que você crie uma imagem original.',
+            'Use "reply" para aconselhamento, conversa normal, dúvidas, análise de relacionamento, edição/análise de imagem existente, ou pedidos ambíguos.',
+            'Se a confiança não for suficiente, responda "reply". Seja conservador.',
+            'Se o pedido mencionar múltiplas variações, normalize para uma única imagem representativa.',
+            'Se decidir "generate_image", devolva um prompt visual claro em português.',
+            'Responda apenas JSON válido, sem markdown, com o formato:',
+            '{"decision":"reply"|"generate_image","confidence":"low"|"medium"|"high","prompt":"string opcional","style":"vivid"|"natural","quality":"standard"|"hd"}',
+          ].join(' '),
+        },
+        {
+          role: 'user',
+          content: [
+            summary ? `Resumo da conversa:\n${summary}` : undefined,
+            `Histórico recente:\n${recentTranscript}`,
+            `Mensagem atual do usuário:\n${params.messageText}`,
+          ]
+            .filter(Boolean)
+            .join('\n\n'),
+        },
+      ],
+      {
+        maxTokens: 250,
+        temperature: 0,
+      },
+    )
+
+    return this.parseChatImageGenerationIntent(result.content)
+  }
+
+  private parseChatImageGenerationIntent(rawContent: string): ChatImageGenerationIntent {
+    const trimmed = rawContent.trim()
+    const jsonCandidate = trimmed.match(/\{[\s\S]*\}/)?.[0] ?? trimmed
+
+    try {
+      const parsed = JSON.parse(jsonCandidate) as Record<string, unknown>
+      const decision =
+        parsed.decision === 'generate_image' ? 'generate_image' : 'reply'
+      const confidence =
+        parsed.confidence === 'high' || parsed.confidence === 'medium' || parsed.confidence === 'low'
+          ? parsed.confidence
+          : 'low'
+      const prompt =
+        typeof parsed.prompt === 'string' && parsed.prompt.trim().length > 0
+          ? parsed.prompt.trim()
+          : undefined
+      const style = parsed.style === 'natural' ? 'natural' : 'vivid'
+      const quality = parsed.quality === 'hd' ? 'hd' : 'standard'
+
+      return {
+        decision: prompt || decision === 'reply' ? decision : 'reply',
+        confidence,
+        prompt,
+        style,
+        quality,
+      }
+    } catch (error) {
+      this.deps.logger.warn({ error, rawContent }, 'Failed to parse chat image generation intent')
+      return {
+        decision: 'reply',
+        confidence: 'low',
+      }
+    }
+  }
+
+  private async loadChatImageGenerationQuota(userId: string) {
+    return loadMonthlyQuota({
+      userId,
+      resourceType: CHAT_IMAGE_GENERATION_RESOURCE_TYPE,
+      limit: CHAT_IMAGE_GENERATION_MONTHLY_LIMIT,
+      usageCounterRepo: this.deps.usageCounterRepo,
+      logger: this.deps.logger,
+      unavailableWarningMessage:
+        'usage_counters table is unavailable, falling back to stateless chat image quota',
+    })
+  }
+
+  private async incrementChatImageGenerationQuota(userId: string) {
+    return incrementMonthlyQuota({
+      userId,
+      resourceType: CHAT_IMAGE_GENERATION_RESOURCE_TYPE,
+      usageCounterRepo: this.deps.usageCounterRepo,
+      logger: this.deps.logger,
+      unavailableWarningMessage:
+        'usage_counters table is unavailable, skipping chat image quota persistence',
+    })
+  }
+
+  private async persistGeneratedConversationImage(params: {
+    conversationId: string
+    userId: string
+    base64?: string
+    sourceUrl?: string
+    mimeType?: string
+  }): Promise<{ storagePath: string; mimeType: string; signedUrl?: string }> {
+    const uploadBuffer = this.deps.inlineImageStorage?.uploadBuffer
+    if (!uploadBuffer) {
+      throw new Error('Inline image storage upload is not configured')
+    }
+
+    let contentType = params.mimeType?.trim().toLowerCase() || 'image/png'
+    let buffer: Buffer
+
+    if (params.base64) {
+      buffer = Buffer.from(params.base64, 'base64')
+    } else if (params.sourceUrl) {
+      const response = await fetch(params.sourceUrl)
+      if (!response.ok) {
+        throw new Error(`Failed to download generated image: ${response.status}`)
+      }
+
+      const arrayBuffer = await response.arrayBuffer()
+      buffer = Buffer.from(arrayBuffer)
+      contentType = response.headers.get('content-type')?.trim().toLowerCase() || contentType
+    } else {
+      throw new Error('Generated image payload is empty')
+    }
+
+    const normalizedMimeType =
+      contentType === 'image/jpeg' || contentType === 'image/webp' ? contentType : 'image/png'
+    const storagePath = `users/${params.userId}/conversations/${params.conversationId}/generated-images/${randomUUID()}${getGeneratedImageExtension(normalizedMimeType)}`
+
+    await uploadBuffer({
+      path: storagePath,
+      data: buffer,
+      contentType: normalizedMimeType,
+    })
+
+    const signedUrl = this.deps.inlineImageStorage?.createSignedReadUrl
+      ? await this.deps.inlineImageStorage.createSignedReadUrl(storagePath)
+      : undefined
+
+    return {
+      storagePath,
+      mimeType: normalizedMimeType,
+      signedUrl,
+    }
+  }
+
+  private async handleAppChatImageGeneration(params: {
+    user: User
+    conversation: Conversation
+    message: IncomingMessage
+    messageText: string
+    attachmentIds?: string[]
+  }): Promise<
+    | {
+        handled: false
+      }
+    | {
+        handled: true
+        content: string
+        outgoingContent:
+          | { type: 'text'; text: string }
+          | { type: 'image'; url: string; caption?: string }
+      }
+  > {
+    if (!this.shouldAttemptAppChatImageGeneration({
+      content: params.messageText,
+      hasImage: params.message.content.type === 'image',
+      hasAudio: params.message.content.type === 'audio',
+      attachmentIds: params.attachmentIds,
+      conversationId: params.conversation.id,
+    })) {
+      return { handled: false }
+    }
+
+    const intent = await this.classifyChatImageGenerationIntent({
+      conversation: params.conversation,
+      messageText: params.messageText,
+    })
+
+    if (
+      intent.decision !== 'generate_image' ||
+      intent.confidence === 'low' ||
+      !intent.prompt ||
+      !this.deps.imageService
+    ) {
+      return { handled: false }
+    }
+
+    await this.saveUserMessage(params.conversation.id, params.message, params.messageText)
+
+    this.deps.logger.info(
+      {
+        userId: params.user.id,
+        conversationId: params.conversation.id,
+        prompt: intent.prompt,
+        style: intent.style ?? CHAT_IMAGE_GENERATION_DEFAULT_OPTIONS.style,
+        quality: intent.quality ?? CHAT_IMAGE_GENERATION_DEFAULT_OPTIONS.quality,
+      },
+      'chat_image_generation_detected',
+    )
+
+    const quota = await this.loadChatImageGenerationQuota(params.user.id)
+    if (quota && !quota.available) {
+      const blockedMessage =
+        'Você já usou suas 10 gerações de imagem no chat neste mês. Se quiser, me peça outra estratégia em texto ou volte no próximo ciclo.'
+
+      await this.saveAIResponse(params.conversation.id, {
+        content: blockedMessage,
+        usage: { inputTokens: 0, outputTokens: 0 },
+      })
+
+      this.deps.logger.info(
+        {
+          userId: params.user.id,
+          conversationId: params.conversation.id,
+          used: quota.used,
+          limit: quota.limit,
+        },
+        'chat_image_generation_quota_blocked',
+      )
+
+      return {
+        handled: true,
+        content: blockedMessage,
+        outgoingContent: { type: 'text', text: blockedMessage },
+      }
+    }
+
+    const options: ImageGenerationOptions = {
+      ...CHAT_IMAGE_GENERATION_DEFAULT_OPTIONS,
+      style: intent.style ?? CHAT_IMAGE_GENERATION_DEFAULT_OPTIONS.style,
+      quality: intent.quality ?? CHAT_IMAGE_GENERATION_DEFAULT_OPTIONS.quality,
+    }
+
+    try {
+      const generated = await this.deps.imageService.generate(params.user.id, intent.prompt, options)
+      const storedImage = await this.persistGeneratedConversationImage({
+        conversationId: params.conversation.id,
+        userId: params.user.id,
+        base64: generated.image.base64,
+        sourceUrl: generated.image.url,
+        mimeType: generated.image.mimeType,
+      })
+
+      await this.saveAIImageResponse(params.conversation.id, {
+        content: CHAT_IMAGE_GENERATION_ASSISTANT_COPY,
+        imageStoragePath: storedImage.storagePath,
+        imageMimeType: storedImage.mimeType,
+        prompt: intent.prompt,
+        provider: generated.provider,
+        style: options.style ?? CHAT_IMAGE_GENERATION_DEFAULT_OPTIONS.style!,
+        quality: options.quality ?? CHAT_IMAGE_GENERATION_DEFAULT_OPTIONS.quality!,
+        revisedPrompt: generated.image.revisedPrompt,
+      })
+      await this.incrementChatImageGenerationQuota(params.user.id)
+
+      this.deps.logger.info(
+        {
+          userId: params.user.id,
+          conversationId: params.conversation.id,
+          provider: generated.provider,
+        },
+        'chat_image_generation_executed',
+      )
+
+      return {
+        handled: true,
+        content: CHAT_IMAGE_GENERATION_ASSISTANT_COPY,
+        outgoingContent: {
+          type: 'image',
+          url: storedImage.signedUrl ?? generated.image.url ?? '',
+          caption: CHAT_IMAGE_GENERATION_ASSISTANT_COPY,
+        },
+      }
+    } catch (error) {
+      const failureMessage =
+        'Não consegui gerar essa imagem agora. Se quiser, reformule a cena com mais detalhes ou tente de novo em instantes.'
+
+      await this.saveAIResponse(params.conversation.id, {
+        content: failureMessage,
+        usage: { inputTokens: 0, outputTokens: 0 },
+      })
+
+      this.deps.logger.error(
+        {
+          error,
+          userId: params.user.id,
+          conversationId: params.conversation.id,
+        },
+        'chat_image_generation_failed',
+      )
+
+      return {
+        handled: true,
+        content: failureMessage,
+        outgoingContent: { type: 'text', text: failureMessage },
+      }
+    }
   }
 
   /**
@@ -1442,6 +1859,37 @@ Os arquivos enviados nesta conversa estão bloqueados até a assinatura ativa. N
             : params.attachmentIds && params.attachmentIds.length > 0
               ? { attachmentIds: params.attachmentIds }
               : undefined,
+      }
+
+      const imageGenerationResult = conversation
+        ? await this.handleAppChatImageGeneration({
+            user,
+            conversation,
+            message,
+            messageText: normalizedContent,
+            attachmentIds: params.attachmentIds,
+          })
+        : { handled: false as const }
+
+      if (imageGenerationResult.handled) {
+        userMessageSaved = true
+
+        const sendResult = await this.deps.channel.sendMessage({
+          recipientId: userId,
+          content: imageGenerationResult.outgoingContent,
+        })
+
+        this.deps.logger.info(
+          {
+            userId: user.id,
+            conversationId,
+            responseMessageId: sendResult.messageId,
+            elapsed: Date.now() - startedAt.getTime(),
+          },
+          'App response sent',
+        )
+
+        return { success: true, responseMessageId: sendResult.messageId }
       }
 
       // Processa com IA (reutiliza toda a lógica existente)

@@ -52,6 +52,9 @@ export interface Usage {
     conversation: ImageAnalysisUsageBucket;
     profile: ImageAnalysisUsageBucket;
   };
+  imageGenerations: {
+    chat: ImageAnalysisUsageBucket;
+  };
 }
 
 export interface Profile {

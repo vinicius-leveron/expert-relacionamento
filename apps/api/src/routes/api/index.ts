@@ -16,6 +16,7 @@ import type {
   SupabaseDiagnosticRepository,
   SupabaseSessionRepository,
   SupabaseSubscriptionRepository,
+  UsageCounterRepository,
 } from '@perpetuo/database'
 import type { Logger } from 'pino'
 import { createAuthRoutes } from './auth.routes.js'
@@ -23,6 +24,7 @@ import { createStreamRoutes } from './stream.routes.js'
 import { createAuthMiddleware } from '../../middleware/auth.middleware.js'
 import type { MessageEmitter } from '../../events/message-emitter.js'
 import type { MessagePipeline } from '../../pipeline/message-pipeline.js'
+import { loadMonthlyQuota } from '../../services/monthly-usage-quota.service.js'
 import {
   ChatAttachmentStorageService,
   sanitizeAttachmentFileName,
@@ -35,6 +37,8 @@ const MAX_INLINE_AUDIO_SIZE_BYTES = 10 * 1024 * 1024
 const MAX_PROFILE_AVATAR_SIZE_BYTES = 3 * 1024 * 1024
 const CONVERSATION_IMAGE_ANALYSIS_LIMIT = 30
 const PROFILE_IMAGE_ANALYSIS_LIMIT = 5
+const CHAT_IMAGE_GENERATION_MONTHLY_LIMIT = 10
+const CHAT_IMAGE_GENERATION_RESOURCE_TYPE = 'chat_image_generation'
 const PROFILE_IMAGE_ANALYSIS_AGENT_IDS = ['instagram-analyzer']
 const SUPPORTED_ATTACHMENT_MIME_TYPES = new Set([
   'application/pdf',
@@ -158,6 +162,7 @@ export interface ApiRoutesConfig {
   avatarProfileRepo?: SupabaseAvatarProfileRepository
   diagnosticRepo?: SupabaseDiagnosticRepository
   subscriptionRepo?: SupabaseSubscriptionRepository
+  usageCounterRepo?: UsageCounterRepository
   messageEmitter?: MessageEmitter
   appPipeline?: MessagePipeline
   paymentUrl?: string
@@ -184,6 +189,7 @@ export function createApiRoutes(config: ApiRoutesConfig) {
     avatarProfileRepo,
     diagnosticRepo,
     subscriptionRepo,
+    usageCounterRepo,
     messageEmitter,
     appPipeline,
     paymentUrl,
@@ -268,6 +274,21 @@ export function createApiRoutes(config: ApiRoutesConfig) {
             }),
           ])
         : [0, 0]
+    const chatImageGenerationQuota =
+      (await loadMonthlyQuota({
+        userId,
+        resourceType: CHAT_IMAGE_GENERATION_RESOURCE_TYPE,
+        limit: CHAT_IMAGE_GENERATION_MONTHLY_LIMIT,
+        usageCounterRepo,
+        logger,
+        unavailableWarningMessage:
+          'usage_counters table is unavailable, falling back to stateless chat image profile quota',
+      })) ?? {
+        available: true,
+        used: 0,
+        limit: CHAT_IMAGE_GENERATION_MONTHLY_LIMIT,
+        remaining: CHAT_IMAGE_GENERATION_MONTHLY_LIMIT,
+      }
     const diagnosisCompleted = diagnostic !== null
     const hasStructuredDiagnosis = avatarProfile?.status === 'completed'
     const hasActiveSubscription = subscription?.status === 'active'
@@ -346,6 +367,13 @@ export function createApiRoutes(config: ApiRoutesConfig) {
             used: profileImageAnalysisUsedThisMonth,
             limit: PROFILE_IMAGE_ANALYSIS_LIMIT,
             remaining: profileImageAnalysisRemainingThisMonth,
+          },
+        },
+        imageGenerations: {
+          chat: {
+            used: chatImageGenerationQuota.used,
+            limit: chatImageGenerationQuota.limit,
+            remaining: chatImageGenerationQuota.remaining,
           },
         },
       },
