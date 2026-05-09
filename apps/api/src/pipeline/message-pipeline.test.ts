@@ -1460,6 +1460,61 @@ describe('MessagePipeline', () => {
     })
   })
 
+  it('processAppMessage gera imagem para pedido explicito mesmo quando a frase vem como pergunta de capacidade', async () => {
+    const conversationRepo = new InMemoryConversationRepo()
+    const usageCounterRepo = new InMemoryUsageCounterRepo()
+    const inlineImageStorage = {
+      removeObject: vi.fn(async () => {}),
+      uploadBuffer: vi.fn(async ({ path }: { path: string }) => ({ path })),
+      createSignedReadUrl: vi.fn(async (path: string) => `https://cdn.test/${path}`),
+    }
+    const imageService = {
+      generate: vi.fn(async () => ({
+        image: {
+          base64: Buffer.from('generated-image').toString('base64'),
+          mimeType: 'image/png',
+        },
+        provider: 'gemini-2.5-flash-image',
+      })),
+    }
+    const { pipeline, aiProvider, channel, userRepo } = createPipeline({
+      message: createTextMessage('ignorada'),
+      aiResponses: ['não deveria ser usada'],
+      conversationRepo,
+      usageCounterRepo,
+      imageService,
+      inlineImageStorage,
+    })
+
+    const user = await userRepo.findOrCreateByPhone('5511999999999')
+    const conversation = await conversationRepo.create({ userId: user.id, channel: 'app' })
+
+    const result = await pipeline.processAppMessage({
+      userId: user.id,
+      conversationId: conversation.id,
+      content: 'voce consegue gerar uma foto minha na praia?',
+    })
+
+    expect(result.success).toBe(true)
+    expect(aiProvider.calls).toHaveLength(0)
+    expect(imageService.generate).toHaveBeenCalledWith(
+      user.id,
+      'uma foto minha na praia',
+      expect.objectContaining({
+        style: 'natural',
+        quality: 'standard',
+        size: '1024x1024',
+      }),
+    )
+    expect(channel.sentMessages[0]?.content).toMatchObject({
+      type: 'image',
+      caption: 'Aqui está a imagem que criei para você.',
+    })
+    expect(usageCounterRepo.incrementCalls).toEqual([
+      { userId: user.id, resourceType: 'chat_image_generation' },
+    ])
+  })
+
   it('processAppMessage cai no fluxo normal de reply quando a classificação não pede imagem', async () => {
     const conversationRepo = new InMemoryConversationRepo()
     const usageCounterRepo = new InMemoryUsageCounterRepo()

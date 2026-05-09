@@ -152,6 +152,12 @@ const CHAT_IMAGE_GENERATION_DEFAULT_OPTIONS: ImageGenerationOptions = {
   size: '1024x1024',
 }
 const CHAT_IMAGE_GENERATION_ASSISTANT_COPY = 'Aqui está a imagem que criei para você.'
+const CHAT_IMAGE_GENERATION_CREATE_VERB_PATTERN =
+  /\b(cria|criar|crie|gera|gerar|gere|faz|fazer|faca|monta|montar|monte|desenha|desenhar|desenhe|produz|produzir|produza)\b/
+const CHAT_IMAGE_GENERATION_IMAGE_NOUN_PATTERN =
+  /\b(foto|imagem|arte|ilustracao|capa|poster|retrato|avatar|wallpaper|desenho)\b/
+const CHAT_IMAGE_GENERATION_CAPABILITY_PREFIX_PATTERN =
+  /^(voce\s+consegue|voce\s+pode|pode|poderia)\b/
 const PROFILE_IMAGE_ANALYSIS_AGENT_IDS = new Set<AgentId>(['instagram-analyzer'])
 
 type ImageAnalysisQuotaScope = 'conversation' | 'profile'
@@ -175,6 +181,29 @@ function getGeneratedImageExtension(mediaType: string): string {
     default:
       return '.png'
   }
+}
+
+function normalizeChatImageGenerationText(value: string): string {
+  return value
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+}
+
+function buildHeuristicChatImagePrompt(messageText: string): string {
+  const cleaned = messageText
+    .trim()
+    .replace(/[?!.]+$/g, '')
+    .replace(/^(voce|você)\s+consegue\s+/i, '')
+    .replace(/^(voce|você)\s+pode\s+/i, '')
+    .replace(/^(pode|poderia|consegue)\s+/i, '')
+    .replace(
+      /^(me\s+)?(cria|criar|crie|gera|gerar|gere|faz|fazer|faça|faca|monta|montar|monte|desenha|desenhar|desenhe|produz|produzir|produza)\s+/i,
+      '',
+    )
+    .trim()
+
+  return cleaned.length > 0 ? cleaned : messageText.trim()
 }
 
 /**
@@ -789,6 +818,22 @@ Os arquivos enviados nesta conversa estão bloqueados até a assinatura ativa. N
     conversation: Conversation
     messageText: string
   }): Promise<ChatImageGenerationIntent> {
+    const normalizedMessageText = normalizeChatImageGenerationText(params.messageText)
+    const isExplicitCreateRequest =
+      CHAT_IMAGE_GENERATION_CAPABILITY_PREFIX_PATTERN.test(normalizedMessageText) &&
+      CHAT_IMAGE_GENERATION_CREATE_VERB_PATTERN.test(normalizedMessageText) &&
+      CHAT_IMAGE_GENERATION_IMAGE_NOUN_PATTERN.test(normalizedMessageText)
+
+    if (isExplicitCreateRequest) {
+      return {
+        decision: 'generate_image',
+        confidence: 'high',
+        prompt: buildHeuristicChatImagePrompt(params.messageText),
+        style: /\b(foto|retrato|realista)\b/.test(normalizedMessageText) ? 'natural' : 'vivid',
+        quality: 'standard',
+      }
+    }
+
     const recentMessages = await this.deps.conversationRepo?.getRecentMessages(params.conversation.id, 6)
     const recentTranscript =
       recentMessages && recentMessages.length > 0
@@ -815,6 +860,7 @@ Os arquivos enviados nesta conversa estão bloqueados até a assinatura ativa. N
             'Sua tarefa é decidir se a mensagem atual pede criação de UMA imagem nova a partir de texto.',
             'Use "generate_image" apenas quando o usuário quer que você crie uma imagem original.',
             'Use "reply" para aconselhamento, conversa normal, dúvidas, análise de relacionamento, edição/análise de imagem existente, ou pedidos ambíguos.',
+            'Perguntas de capacidade como "voce consegue gerar uma foto minha na praia?" contam como pedido de criacao de imagem.',
             'Se a confiança não for suficiente, responda "reply". Seja conservador.',
             'Se o pedido mencionar múltiplas variações, normalize para uma única imagem representativa.',
             'Se decidir "generate_image", devolva um prompt visual claro em português.',
