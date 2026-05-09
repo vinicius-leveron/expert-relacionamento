@@ -68,8 +68,9 @@ export default function WelcomeScreen() {
 
   const onViewableItemsChanged = useRef(
     ({ viewableItems }: { viewableItems: Array<{ index: number | null }> }) => {
-      if (viewableItems[0]?.index !== null) {
-        setCurrentIndex(viewableItems[0].index);
+      const nextIndex = viewableItems[0]?.index;
+      if (typeof nextIndex === 'number') {
+        setCurrentIndex(nextIndex);
       }
     }
   ).current;

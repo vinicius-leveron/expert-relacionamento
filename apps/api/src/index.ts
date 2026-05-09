@@ -185,6 +185,10 @@ const allowedOrigins = new Set(
   ].filter(Boolean) as string[]
 )
 
+const isAllowedLocalDevOrigin = (origin: string) =>
+  /^(https?:\/\/)(localhost|127\.0\.0\.1)(:\d+)?$/.test(origin) ||
+  /^exp:\/\/(localhost|127\.0\.0\.1):\d+$/.test(origin)
+
 const isAllowedWebOrigin = (origin: string) =>
   /^https:\/\/expert-relacionamento(?:-[a-z0-9-]+)*\.vercel\.app$/.test(origin)
 
@@ -298,7 +302,11 @@ async function main() {
     '/api/*',
     cors({
       origin: (origin) => {
-        if (allowedOrigins.has(origin) || isAllowedWebOrigin(origin)) {
+        if (
+          allowedOrigins.has(origin) ||
+          isAllowedLocalDevOrigin(origin) ||
+          isAllowedWebOrigin(origin)
+        ) {
           return origin
         }
 
